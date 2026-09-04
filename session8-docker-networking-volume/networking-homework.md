@@ -1,5 +1,10 @@
 # Docker Networking & Volume — Homework
 
+Screenshots are in the `screenshots/` folder.
+
+- `screenshots/01-networks-ping.jpg` — docker network ls, ping tests between containers showing network isolation
+- `screenshots/02-bind-mount.jpg` — nginx with bind mount, curl before and after host file change
+
 All exercises were performed on `shreeya@devbox` (Ubuntu 22.04 with Docker 24.x).
 
 ---

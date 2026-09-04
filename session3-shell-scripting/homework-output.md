@@ -1,5 +1,7 @@
 # Shell Scripting Homework
 
+Screenshot of the script output is in `screenshots/01-sysinfo-script-output.jpg`.
+
 ## Script: `sysinfo.sh`
 
 A bash script that gathers system details and saves process information to a file.

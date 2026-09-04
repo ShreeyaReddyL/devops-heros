@@ -1,5 +1,9 @@
 # Docker Homework
 
+Screenshots are in the `screenshots/` folder.
+
+- `screenshots/01-multistage-curl-dockerps.jpg` — curl to port 8080 and docker ps showing the multi-stage container
+
 ## Docker Hello World Applications
 
 Each subfolder contains a Hello World web application with its own `Dockerfile`.

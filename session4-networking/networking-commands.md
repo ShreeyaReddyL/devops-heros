@@ -1,5 +1,7 @@
 # Networking Fundamentals — Homework
 
+Screenshot of networking commands is in `screenshots/01-networking-commands.jpg`.
+
 ## Networking Commands Practice
 
 All commands were executed on `shreeya@devbox` (Ubuntu 22.04 LTS).

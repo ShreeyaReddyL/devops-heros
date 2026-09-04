@@ -1,5 +1,11 @@
 # Git/GitHub — Homework
 
+Screenshots are in the `screenshots/` folder.
+
+- `screenshots/01-commit-and-cherry-pick.jpg` — git log, cherry-pick, and branch operations
+
+---
+
 ## Task 1: `git commit -a -m` vs `git commit -m`
 
 ### Key Difference

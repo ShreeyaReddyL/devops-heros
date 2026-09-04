@@ -1,5 +1,12 @@
 # Linux Fundamentals — Homework
 
+All commands were run on `shreeya@devbox` (Ubuntu 22.04). Screenshots are in the `screenshots/` folder.
+
+- `screenshots/01-soft-hard-links.jpg` — creating hard and soft links, deleting original, verifying behavior
+- `screenshots/02-adduser-journalctl.jpg` — adduser output, id command, journalctl logs
+
+---
+
 ## Task 1: Soft Links vs Hard Links
 
 ### What Are They?
