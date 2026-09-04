@@ -1,20 +1,37 @@
 services:
-
   frontend:
-    image: nginx
+    image: nginx:alpine
+    container_name: sr-frontend
     ports:
-      - "8080:80"
+      - "8090:80"
+    volumes:
+      - ./frontend/index.html:/usr/share/nginx/html/index.html:ro
+    networks:
+      - app-frontend
+    depends_on:
+      - backend
 
   backend:
-    image: nginx
+    image: alpine:3.20
+    container_name: sr-backend
+    command: sleep infinity
+    networks:
+      - app-frontend
+      - app-backend
+    depends_on:
+      - database
 
   database:
     image: mysql:8.0
+    container_name: sr-database
     environment:
-      MYSQL_ROOT_PASSWORD: root
-    volumes:
-      - db_data:/var/lib/mysql
+      MYSQL_ROOT_PASSWORD: devops123
+      MYSQL_DATABASE: testdb
+    networks:
+      - app-backend
 
-volumes:
-  db_data:
-
+networks:
+  app-frontend:
+    driver: bridge
+  app-backend:
+    driver: bridge
