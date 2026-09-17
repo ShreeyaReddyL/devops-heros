@@ -1,0 +1,18 @@
+# Created from scratch — every K8s object needs these four fields:
+#   apiVersion - tells the API server which schema to validate against
+#   kind       - the type of resource being created
+#   metadata   - name, labels, and other identifiers
+#   spec       - desired state of the resource
+apiVersion: v1          # Pods belong to the core API group, version v1
+kind: Pod
+metadata:
+  name: my-nginx-pod
+  labels:
+    app: nginx
+    env: dev
+spec:
+  containers:
+    - name: nginx-container
+      image: nginx:1.25
+      ports:
+        - containerPort: 80
