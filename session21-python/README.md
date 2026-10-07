@@ -1,5 +1,8 @@
 # Session 21 — DevOps Final Capstone: TaskBoard (Python)
 
+> [!NOTE]
+> **Capstone Homework Submission**: The completed student submission report, architecture analysis, and screenshots are documented in [Readme-homework.md](file:///c:/Users/Dell/OneDrive/Desktop/devops/session21-python/Readme-homework.md).
+
 ## 1. What we are building
 
 TaskBoard is a small but realistic SaaS-style project management application:

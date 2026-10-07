@@ -1,0 +1,4 @@
+# Example Terraform Variables for TaskBoard AWS EKS Deployment
+aws_region   = "ap-south-1"
+cluster_name = "taskboard-eks"
+environment  = "dev"
