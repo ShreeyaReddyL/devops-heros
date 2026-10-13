@@ -1,4 +1,7 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: taskboard
+  name: campusfix
+  labels:
+    app.kubernetes.io/name: campusfix
+    app.kubernetes.io/part-of: campusfix

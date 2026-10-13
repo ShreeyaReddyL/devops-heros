@@ -1,4 +1,19 @@
-# Example Terraform Variables for TaskBoard AWS EKS Deployment
+# Copy to terraform.tfvars and adjust. Never commit real credentials:
+# AWS authentication comes from the environment (~/.aws/credentials, SSO, or
+# AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY), not from this file.
+
 aws_region   = "ap-south-1"
-cluster_name = "taskboard-eks"
+cluster_name = "campusfix-eks"
 environment  = "dev"
+
+# Kubernetes version in Amazon EKS standard support (end of standard support
+# March 2027). Do not use 1.31-1.33: those are extended support and bill higher.
+cluster_version = "1.35"
+
+vpc_cidr           = "10.20.0.0/16"
+availability_zones = ["ap-south-1a", "ap-south-1b"]
+
+node_instance_types = ["t3.medium"]
+node_min_size       = 2
+node_max_size       = 4
+node_desired_size   = 2

@@ -1,0 +1,23 @@
+{{- if .Values.monitoring.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "campusfix.fullname" . }}-backend
+  labels:
+    {{- include "campusfix.labels" . | nindent 4 }}
+    # Required by the kube-prometheus-stack chart's ServiceMonitor selector.
+    release: {{ .Values.monitoring.release }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  selector:
+    matchLabels:
+      {{- include "campusfix.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: backend
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s
+{{- end }}

@@ -1,10 +1,36 @@
+# Troubleshooting exercise 1 - unresolvable image tag.
+#
+# EXPECTED SYMPTOM: the pod enters ImagePullBackOff / ErrImagePull because the
+# tag does not exist in the registry.
+#
+#   kubectl apply -f troubleshooting/broken-image.yaml
+#   kubectl get pods -n campusfix
+#   kubectl describe pod -n campusfix -l app=broken-image
+#   kubectl get events -n campusfix --sort-by=.lastTimestamp
+#
+# RECOVERY:
+#   kubectl delete deployment broken-image -n campusfix
+#
+# Follow-up: check that the image actually exists and that imagePullSecrets are
+# set if the registry is private.
 apiVersion: apps/v1
 kind: Deployment
-metadata: {name: taskboard-broken-image, namespace: taskboard}
+metadata:
+  name: broken-image
+  namespace: campusfix
+  labels:
+    exercise: broken-image
 spec:
   replicas: 1
-  selector: {matchLabels: {app: broken-image}}
+  selector:
+    matchLabels:
+      app: broken-image
   template:
-    metadata: {labels: {app: broken-image}}
+    metadata:
+      labels:
+        app: broken-image
     spec:
-      containers: [{name: backend, image: ghcr.io/example/taskboard-backend:does-not-exist}]
+      containers:
+        - name: backend
+          image: ghcr.io/example/campusfix-backend:does-not-exist
+          imagePullPolicy: Always

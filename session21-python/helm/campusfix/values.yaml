@@ -1,0 +1,77 @@
+# Default values for the CampusFix chart.
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Needed when the images live in a private registry. For GHCR on the course
+# account, the default GitHub token already grants pull access to packages in
+# the same repository, so this can stay empty.
+imagePullSecrets: []
+
+backend:
+  # GHCR requires a lowercase owner. The CI pipeline overrides image+tag with
+  # the commit SHA on every release.
+  image: ghcr.io/shreeyareddyl/campusfix-backend
+  tag: latest
+  imagePullPolicy: IfNotPresent
+  replicaCount: 2
+  port: 8000
+  servicePort: 8000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+frontend:
+  image: ghcr.io/shreeyareddyl/campusfix-frontend
+  tag: latest
+  imagePullPolicy: IfNotPresent
+  replicaCount: 2
+  # Unprivileged Nginx cannot bind port 80, so the container listens on 8080.
+  port: 8080
+  servicePort: 8080
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+postgres:
+  enabled: true
+  image: postgres:16-alpine
+  database: campusfix
+  username: campusfix
+  # LOCAL DEVELOPMENT DEFAULT ONLY. Set postgres.existingSecret in any shared
+  # environment so the real password is never stored in the chart.
+  password: campusfix
+  existingSecret: ""
+  storage: 5Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+ingress:
+  enabled: false
+  className: nginx
+  host: campusfix.local
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 60
+
+monitoring:
+  # Must match the release name of the kube-prometheus-stack installation.
+  release: kube-prometheus-stack
+  serviceMonitor:
+    enabled: true

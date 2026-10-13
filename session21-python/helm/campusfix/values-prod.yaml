@@ -1,0 +1,34 @@
+# Production overrides. Tags and image names are supplied at release time by the
+# CI pipeline (--set backend.tag=<commit sha>), so they are intentionally not
+# pinned here.
+backend:
+  replicaCount: 3
+  imagePullPolicy: IfNotPresent
+
+frontend:
+  replicaCount: 3
+  imagePullPolicy: IfNotPresent
+
+postgres:
+  # Supply a real Secret instead of the development default password:
+  #   kubectl -n campusfix create secret generic campusfix-postgres \
+  #     --from-literal=username=... --from-literal=password=... \
+  #     --from-literal=database=campusfix \
+  #     --from-literal=url='postgresql+psycopg://...'
+  existingSecret: campusfix-postgres
+  storage: 20Gi
+
+ingress:
+  enabled: true
+  className: nginx
+  host: campusfix.local
+
+hpa:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 9
+  targetCPUUtilizationPercentage: 60
+
+monitoring:
+  serviceMonitor:
+    enabled: true

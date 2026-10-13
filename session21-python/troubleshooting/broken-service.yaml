@@ -1,6 +1,29 @@
+# Troubleshooting exercise 2 - Service selector that matches no pods.
+#
+# EXPECTED SYMPTOM: the Service exists but `kubectl get endpoints` returns
+# <none>, so the Ingress returns 503 even though the pods are Running.
+#
+#   kubectl apply -f troubleshooting/broken-service.yaml
+#   kubectl get svc broken-service -n campusfix
+#   kubectl get endpoints broken-service -n campusfix   # -> <none>
+#
+# RECOVERY:
+#   kubectl delete service broken-service -n campusfix
+#
+# Follow-up: compare the Service selector against the real pod labels:
+#   kubectl get pods -n campusfix --show-labels
 apiVersion: v1
 kind: Service
-metadata: {name: broken-service, namespace: taskboard}
+metadata:
+  name: broken-service
+  namespace: campusfix
+  labels:
+    exercise: broken-service
 spec:
-  selector: {app: label-that-does-not-exist}
-  ports: [{port: 8080, targetPort: 8080}]
+  type: ClusterIP
+  selector:
+    app: label-that-does-not-exist
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
