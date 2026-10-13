@@ -1,10 +1,70 @@
-.idea/
-.vscode/
+# ---- Secrets -------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+kubeconfig
+kubeconfig.*
+kube.config
+*.kubeconfig
+
+# ---- Python -------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# ---- Local development databases ----------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+live_check.db
+test.db
+
+# ---- Node / frontend -----------------------------------------------------
 node_modules/
 dist/
-target/
-*.log
-.env
+dist-ssr/
+.vite/
+npm-debug.log*
+yarn-error.log*
+
+# ---- Terraform -----------------------------------------------------------
 .terraform/
+.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+tfplan
+*.tfplan
+
+# ---- Kubernetes / Helm ---------------------------------------------------
+kubeconfig
+*.kubeconfig
+manifests/**/Chart.lock
+
+# ---- General -------------------------------------------------------------
+.idea/
+.vscode/
+target/
+*.log
+.DS_Store
+Thumbs.db
+desktop.ini

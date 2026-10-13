@@ -1,9 +1,459 @@
-import React,{useEffect,useState} from 'react'; import {createRoot} from 'react-dom/client'; import './styles.css';
-const API='/api';
-function App(){const [tasks,setTasks]=useState([]),[stats,setStats]=useState({total:0,todo:0,inProgress:0,done:0}),[filter,setFilter]=useState('ALL'),[showForm,setShowForm]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState('');
- const load=async()=>{try{setError('');const [a,b]=await Promise.all([fetch(`${API}/tasks`),fetch(`${API}/tasks/stats`)]);if(!a.ok||!b.ok)throw Error('Backend unavailable');setTasks(await a.json());setStats(await b.json())}catch(e){setError(e.message)}finally{setLoading(false)}};
- useEffect(()=>{load()},[]); const visible=filter==='ALL'?tasks:tasks.filter(t=>t.status===filter);
- const update=async(t)=>{const next=t.status==='TODO'?'IN_PROGRESS':t.status==='IN_PROGRESS'?'DONE':'TODO';await fetch(`${API}/tasks/${t.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({...t,status:next})});load()};
- const create=async(e)=>{e.preventDefault();const f=new FormData(e.currentTarget);await fetch(`${API}/tasks`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:f.get('title'),description:f.get('description'),priority:f.get('priority'),assignee:f.get('assignee'),status:'TODO'})});e.currentTarget.reset();setShowForm(false);load()};
- return <div className="app"><aside className="sidebar"><div className="brand"><span className="brand-mark">T</span><div><b>TaskBoard</b><small>DevOps Capstone</small></div></div><nav><a className="active">▦ <span>Dashboard</span></a><a>✓ <span>My Tasks</span></a><a>◫ <span>Projects</span></a><a>◌ <span>Activity</span></a></nav><div className="side-bottom"><div className="upgrade"><strong>Ship with confidence.</strong><p>Build, deploy and observe your application.</p></div><div className="profile"><div className="avatar">SR</div><div><b>Shreeya Reddy</b><small>DevOps Engineer</small></div><span>⋮</span></div></div></aside><main className="main"><header><div><p className="eyebrow">WORKSPACE / OVERVIEW</p><h1>Good morning, Shreeya 👋</h1><p className="muted">Here’s what’s happening with your team today.</p></div><button className="primary" onClick={()=>setShowForm(true)}>＋ New task</button></header>{error&&<div className="alert">⚠ {error}. Start the backend and PostgreSQL, then refresh.</div>}<section className="stats"><Stat label="Total tasks" value={stats.total} icon="▦"/><Stat label="To do" value={stats.todo} icon="○"/><Stat label="In progress" value={stats.inProgress} icon="◔"/><Stat label="Completed" value={stats.done} icon="✓"/></section><section className="content-grid"><div className="panel tasks-panel"><div className="panel-head"><div><h2>Tasks</h2><p className="muted">Track work across the product team.</p></div><div className="filters">{['ALL','TODO','IN_PROGRESS','DONE'].map(x=><button className={filter===x?'selected':''} onClick={()=>setFilter(x)} key={x}>{x==='ALL'?'All':x.replace('_',' ')}</button>)}</div></div>{loading?<div className="empty">Loading tasks…</div>:<div className="table-wrap"><table><thead><tr><th>Task</th><th>Assignee</th><th>Priority</th><th>Status</th><th></th></tr></thead><tbody>{visible.map(t=><tr key={t.id}><td><div className="task-title"><span className={`dot ${t.status.toLowerCase()}`}></span><div><b>{t.title}</b><small>{t.description}</small></div></div></td><td>{t.assignee}</td><td><span className={`priority ${t.priority.toLowerCase()}`}>{t.priority}</span></td><td><span className={`status ${t.status.toLowerCase()}`}>{t.status.replace('_',' ')}</span></td><td><button className="icon-btn" onClick={()=>update(t)} title="Advance status">↻</button></td></tr>)}</tbody></table>{!visible.length&&<div className="empty">No tasks in this filter.</div>}</div>}</div><aside className="panel activity"><div className="panel-head"><div><h2>Recent activity</h2><p className="muted">Latest workspace events.</p></div></div><Activity icon="✓" text="Monitoring dashboard completed" time="12 min ago"/><Activity icon="◔" text="Release task moved to in progress" time="38 min ago"/><Activity icon="＋" text="New onboarding task created" time="1 hr ago"/><Activity icon="↗" text="Deployment pipeline passed" time="2 hrs ago"/><div className="pipeline"><span>CI</span><i></i><span>Build</span><i></i><span>Scan</span><i></i><span>Deploy</span></div></aside></section>{showForm&&<div className="modal-backdrop"><form className="modal" onSubmit={create}><div className="modal-head"><div><p className="eyebrow">CREATE TASK</p><h2>Add a new task</h2></div><button type="button" className="close" onClick={()=>setShowForm(false)}>×</button></div><label>Task title<input name="title" required placeholder="e.g. Configure production ingress"/></label><label>Description<textarea name="description" placeholder="What needs to be done?"/></label><div className="form-row"><label>Priority<select name="priority"><option>LOW</option><option>MEDIUM</option><option>HIGH</option></select></label><label>Assignee<input name="assignee" defaultValue="Shreeya Reddy"/></label></div><button className="primary full">Create task</button></form></div>}</main></div>}
-function Stat({label,value,icon}){return <div className="stat"><div className="stat-icon">{icon}</div><div><small>{label}</small><strong>{value}</strong><span>Updated just now</span></div></div>}; function Activity({icon,text,time}){return <div className="activity-row"><span className="activity-icon">{icon}</span><div><b>{text}</b><small>{time}</small></div></div>}; createRoot(document.getElementById('root')).render(<App/>);
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import './styles.css';
+
+const API = '/api';
+
+const STATUSES = ['ALL', 'OPEN', 'IN_PROGRESS', 'RESOLVED'];
+
+const CATEGORIES = [
+  { value: 'WI_FI', label: 'Campus Wi-Fi' },
+  { value: 'PROJECTOR', label: 'Projector / AV' },
+  { value: 'ELECTRICAL', label: 'Electrical & Lighting' },
+  { value: 'PLUMBING', label: 'Plumbing' },
+  { value: 'HOSTEL', label: 'Hostel Maintenance' },
+  { value: 'LAB_EQUIPMENT', label: 'Lab Equipment' },
+  { value: 'IT_SUPPORT', label: 'General IT Support' },
+  { value: 'OTHER', label: 'Other' },
+];
+
+const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+
+// Mirrors ALLOWED_TRANSITIONS in backend/app/schemas.py so the UI can only
+// offer transitions the API will actually accept.
+const NEXT_STATUS = {
+  OPEN: { label: 'Start work', next: 'IN_PROGRESS' },
+  IN_PROGRESS: { label: 'Mark resolved', next: 'RESOLVED' },
+  RESOLVED: { label: 'Reopen', next: 'OPEN' },
+};
+
+const categoryLabel = (value) =>
+  CATEGORIES.find((c) => c.value === value)?.label ?? value;
+
+const prettyStatus = (value) => value.replace('_', ' ');
+
+function StatCard({ label, value, tone }) {
+  return (
+    <div className={`stat stat-${tone}`}>
+      <small>{label}</small>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function TicketForm({ onSubmit, onCancel, error }) {
+  const [form, setForm] = useState({
+    title: '',
+    description: '',
+    category: 'IT_SUPPORT',
+    building: '',
+    reporter: '',
+    priority: 'MEDIUM',
+  });
+
+  const update = (field) => (event) =>
+    setForm((prev) => ({ ...prev, [field]: event.target.value }));
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    await onSubmit(form);
+  };
+
+  return (
+    <form className="ticket-form" onSubmit={handleSubmit}>
+      <h2>Report a campus issue</h2>
+
+      {error && <div className="form-error">{error}</div>}
+
+      <label>
+        Issue title <em>*</em>
+        <input
+          required
+          minLength={5}
+          maxLength={200}
+          value={form.title}
+          onChange={update('title')}
+          placeholder="e.g. Projector not powering on in Lecture Hall 2"
+        />
+      </label>
+
+      <div className="form-row">
+        <label>
+          Category
+          <select value={form.category} onChange={update('category')}>
+            {CATEGORIES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          Priority
+          <select value={form.priority} onChange={update('priority')}>
+            {PRIORITIES.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="form-row">
+        <label>
+          Building / location <em>*</em>
+          <input
+            required
+            minLength={2}
+            maxLength={120}
+            value={form.building}
+            onChange={update('building')}
+            placeholder="e.g. Hostel Block C"
+          />
+        </label>
+
+        <label>
+          Reported by <em>*</em>
+          <input
+            required
+            minLength={2}
+            maxLength={120}
+            value={form.reporter}
+            onChange={update('reporter')}
+            placeholder="e.g. Aarav Sharma"
+          />
+        </label>
+      </div>
+
+      <label>
+        Description
+        <textarea
+          rows={3}
+          maxLength={4000}
+          value={form.description}
+          onChange={update('description')}
+          placeholder="Add any detail that helps the maintenance team..."
+        />
+      </label>
+
+      <div className="form-actions">
+        <button type="button" className="ghost" onClick={onCancel}>
+          Cancel
+        </button>
+        <button type="submit" className="primary">
+          Submit ticket
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function App() {
+  const [tickets, setTickets] = useState([]);
+  const [stats, setStats] = useState({
+    total: 0,
+    open: 0,
+    in_progress: 0,
+    resolved: 0,
+    critical: 0,
+    high: 0,
+    by_category: [],
+  });
+  const [filter, setFilter] = useState('ALL');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [formError, setFormError] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      setError('');
+      const [ticketsResponse, statsResponse] = await Promise.all([
+        fetch(`${API}/tickets`),
+        fetch(`${API}/tickets/stats`),
+      ]);
+      if (!ticketsResponse.ok || !statsResponse.ok) {
+        throw new Error(`API responded ${ticketsResponse.status}/${statsResponse.status}`);
+      }
+      setTickets(await ticketsResponse.json());
+      setStats(await statsResponse.json());
+    } catch (err) {
+      setError(
+        `${err.message}. Start the backend with "docker compose up --build", then refresh.`
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const visible = useMemo(
+    () => (filter === 'ALL' ? tickets : tickets.filter((t) => t.status === filter)),
+    [tickets, filter]
+  );
+
+  const advance = async (ticket) => {
+    const { next } = NEXT_STATUS[ticket.status];
+    setError('');
+    try {
+      const response = await fetch(`${API}/tickets/${ticket.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: next }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.detail || `Update failed (${response.status})`);
+      }
+      setNotice(`Ticket #${ticket.id} moved to ${prettyStatus(next)}.`);
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const remove = async (ticket) => {
+    setError('');
+    try {
+      const response = await fetch(`${API}/tickets/${ticket.id}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error(`Delete failed (${response.status})`);
+      setNotice(`Ticket #${ticket.id} deleted.`);
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const submitTicket = async (form) => {
+    setFormError('');
+    setSubmitting(true);
+    try {
+      const response = await fetch(`${API}/tickets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        const detail = Array.isArray(body.detail)
+          ? body.detail.map((d) => `${d.loc?.join('.')}: ${d.msg}`).join('; ')
+          : body.detail;
+        throw new Error(detail || `Create failed (${response.status})`);
+      }
+      setNotice(`Ticket #${(await response.json()).id} submitted.`);
+      setShowForm(false);
+      await load();
+    } catch (err) {
+      setFormError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="app">
+      <aside className="sidebar">
+        <div className="brand">
+          <span className="brand-mark">C</span>
+          <div>
+            <b>CampusFix</b>
+            <small>Maintenance &amp; IT Support</small>
+          </div>
+        </div>
+
+        <nav>
+          <span className="nav-item active">▦ Dashboard</span>
+          <span className="nav-item">⚠ Open issues</span>
+          <span className="nav-item">◷ In progress</span>
+          <span className="nav-item">✓ Resolved</span>
+        </nav>
+
+        <div className="side-bottom">
+          <div className="upgrade">
+            <strong>Facilities workflow</strong>
+            <p>
+              Report Wi-Fi, projector, electrical, plumbing, hostel and lab issues
+              from one desk.
+            </p>
+          </div>
+          <div className="profile">
+            <div className="avatar">SR</div>
+            <div>
+              <b>Shreeya Reddy</b>
+              <small>DevOps Engineer</small>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <main className="main">
+        <header>
+          <div>
+            <p className="eyebrow">CAMPUS / MAINTENANCE DESK</p>
+            <h1>CampusFix</h1>
+            <p className="muted">
+              Track every reported issue across campus facilities and IT support.
+            </p>
+          </div>
+          <button className="primary" onClick={() => setShowForm((v) => !v)}>
+            ＋ Report issue
+          </button>
+        </header>
+
+        {error && <div className="alert">⚠ {error}</div>}
+        {notice && !error && (
+          <div className="alert success" onClick={() => setNotice('')}>
+            ✓ {notice}
+          </div>
+        )}
+
+        <section className="stats">
+          <StatCard label="Total tickets" value={stats.total} tone="total" />
+          <StatCard label="Open" value={stats.open} tone="open" />
+          <StatCard label="In progress" value={stats.in_progress} tone="progress" />
+          <StatCard label="Resolved" value={stats.resolved} tone="resolved" />
+          <StatCard label="Critical" value={stats.critical} tone="critical" />
+        </section>
+
+        {showForm && (
+          <TicketForm
+            onSubmit={submitTicket}
+            onCancel={() => {
+              setShowForm(false);
+              setFormError('');
+            }}
+            error={formError}
+          />
+        )}
+
+        <section className="content-grid">
+          <div className="panel">
+            <div className="panel-head">
+              <div>
+                <h2>Support tickets</h2>
+                <p className="muted">
+                  {loading ? 'Loading tickets…' : `${visible.length} shown`}
+                </p>
+              </div>
+              <div className="filters">
+                {STATUSES.map((s) => (
+                  <button
+                    key={s}
+                    className={filter === s ? 'selected' : ''}
+                    onClick={() => setFilter(s)}
+                  >
+                    {s === 'ALL' ? 'All' : prettyStatus(s)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="empty">Loading tickets from the CampusFix API…</div>
+            ) : visible.length === 0 ? (
+              <div className="empty">
+                {tickets.length === 0
+                  ? 'No tickets reported yet. Use “Report issue” to log the first one.'
+                  : `No ${prettyStatus(filter).toLowerCase()} tickets right now.`}
+              </div>
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Issue</th>
+                      <th>Category</th>
+                      <th>Location</th>
+                      <th>Reported by</th>
+                      <th>Priority</th>
+                      <th>Status</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visible.map((t) => (
+                      <tr key={t.id}>
+                        <td>
+                          <div className="ticket-title">
+                            <span className={`dot ${t.status.toLowerCase()}`} />
+                            <div>
+                              <b>#{t.id} {t.title}</b>
+                              <small>{t.description || 'No description provided.'}</small>
+                            </div>
+                          </div>
+                        </td>
+                        <td>{categoryLabel(t.category)}</td>
+                        <td>{t.building}</td>
+                        <td>{t.reporter}</td>
+                        <td>
+                          <span className={`badge priority-${t.priority.toLowerCase()}`}>
+                            {t.priority}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={`badge status-${t.status.toLowerCase()}`}>
+                            {prettyStatus(t.status)}
+                          </span>
+                        </td>
+                        <td className="row-actions">
+                          <button
+                            className="link"
+                            disabled={submitting}
+                            onClick={() => advance(t)}
+                          >
+                            {NEXT_STATUS[t.status].label}
+                          </button>
+                          <button className="link danger" onClick={() => remove(t)}>
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="panel">
+            <div className="panel-head">
+              <div>
+                <h2>Issues by category</h2>
+                <p className="muted">Live counts from PostgreSQL.</p>
+              </div>
+            </div>
+            {stats.by_category.length === 0 ? (
+              <div className="empty">No category data yet.</div>
+            ) : (
+              <ul className="category-list">
+                {stats.by_category.map((c) => {
+                  const pct = stats.total ? Math.round((c.count / stats.total) * 100) : 0;
+                  return (
+                    <li key={c.category}>
+                      <div className="category-row">
+                        <span>{categoryLabel(c.category)}</span>
+                        <b>{c.count}</b>
+                      </div>
+                      <div className="bar">
+                        <span style={{ width: `${pct}%` }} />
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+}
+
+createRoot(document.getElementById('root')).render(<App />);
