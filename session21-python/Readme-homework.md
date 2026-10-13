@@ -110,8 +110,41 @@ earlier report described.
 > container and CI runs are consistent. 3.12.10 is the last 3.12 release that
 > ships a Windows installer; 3.12.11+ are source-only security releases.
 
-**Not installed:** Docker, WSL, AWS CLI, kubectl, Minikube. This report does not
-assume any of them.
+**Not installed at the time of writing:** Docker, WSL, AWS CLI, kubectl,
+Minikube. This report does not assume any of them.
+
+### 2.1 A note on Linux
+
+The course is taught on Linux and the starter report described an Ubuntu
+"devbox". For transparency, here is exactly how the platform question applies
+to this project.
+
+**No Linux was installed to produce the local results in §3.** The commands ran
+in PowerShell on Windows 11 using the official Windows builds of the same
+tools (`helm.exe`, `terraform.exe`) and a per-user Python 3.12.10.
+
+This does not make the deliverables platform-dependent, because every artifact
+in this project is Linux-native regardless of the machine that authored it:
+
+| Artifact | Why it is Linux |
+|---|---|
+| `backend/Dockerfile`, `frontend/Dockerfile` | Linux containers (the frontend uses a Linux Nginx base image) |
+| `.github/workflows/ci-cd.yml` | `runs-on: ubuntu-latest` — pytest, `docker build`, Trivy and Helm all execute on a real Linux runner |
+| `terraform/` | provisions AWS EKS, whose nodes are Linux AMIs (AL2023) |
+| `helm/`, `k8s/` | deploy Linux pods |
+| `prometheus`, `grafana` | Linux containers |
+
+`helm lint` and `terraform validate` return the same result on Windows as on
+Linux, because they evaluate the same configuration.
+
+**What genuinely does need a Linux environment** is producing the *terminal
+evidence* the rubric asks for: `docker compose up --build`,
+`kubectl get pods`, a Prometheus Targets page and a populated Grafana panel.
+Those require a container runtime, and on Windows that means WSL 2 +
+Docker Desktop. That is the next step; see §10.1.
+
+For shell scripting work, Git for Windows already provides **GNU bash 5.2.37**
+(Msys), so the repository's `.sh` scripts are runnable here — verified in §3.11.
 
 ---
 
@@ -337,6 +370,42 @@ untracked.
 
 ---
 
+### 3.11 Load generators — **VERIFIED**
+
+`scripts/load-test.sh` was **broken**: it pointed at
+`http://taskboard.local/api/health`, a stale TaskBoard URL that is not a
+CampusFix route, and nothing in the repository referenced it. It now defaults
+to the CampusFix API, reports success/failure counts and latency percentiles,
+and exits non-zero when requests fail. A PowerShell equivalent
+(`scripts/load-test.ps1`) was added so the tool works on either platform.
+
+Both were executed against the live backend:
+
+```text
+# Git Bash 5.2.37 (MSys) — proves .sh still runs here
+URL=http://127.0.0.1:8000/api/tickets REQUESTS=25 ./scripts/load-test.sh
+  elapsed 2s | successful 25 | failed 0 | avg 0.0045s | max 0.0076s
+  BASH EXIT=0
+
+# PowerShell
+.\scripts\load-test.ps1 -Url http://127.0.0.1:8000/api/tickets -Requests 25
+  elapsed 0.6s | successful 25 | failed 0 | avg 0.0247s | max 0.0541s
+
+# Failure detection
+.\scripts\load-test.ps1 -Url .../api/tickets/999999 -Requests 3
+  successful 0 | failed 3  ->  exit 1  (correctly reported 404)
+```
+
+The generated traffic is visible in `/metrics`, which is the point of the tool:
+
+```text
+http_requests_total{handler="/api/tickets",method="GET",status="2xx"} 50.0
+http_requests_total{handler="/health",method="GET",status="2xx"}       2.0
+http_requests_total{handler="none",method="GET",status="4xx"}           1.0
+```
+
+---
+
 ## 4. Defects found and fixed
 
 These were found by the checks above, not assumed.
@@ -360,6 +429,7 @@ These were found by the checks above, not assumed.
 | 15 | Repo | 7 `.pyc` + 1 `.DS_Store` committed; `.gitignore` missing `__pycache__`, `.pyc`, `.venv`, `test.db` | rubric M3 | extended `.gitignore`, untracked the files |
 | 16 | Frontend | all npm deps pinned to `"latest"` | non-reproducible builds; CI could break on any upstream release | exact versions pinned |
 | 17 | Terraform | EKS module v21 removed the v20 argument names (`cluster_name`, `cluster_version`, `cluster_endpoint_public_access`, `cluster_addons`) | `terraform validate` failed; the stack would never apply | renamed to `name`, `kubernetes_version`, `endpoint_public_access`, `addons` |
+| 18 | `scripts/load-test.sh` | pointed at `http://taskboard.local/api/health`, a stale TaskBoard URL and not a CampusFix route; referenced by nothing | rewrote against the CampusFix API, added latency/failure reporting, added a PowerShell equivalent |
 
 ---
 

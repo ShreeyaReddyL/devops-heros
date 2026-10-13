@@ -273,7 +273,24 @@ recovery step in its header.
 
 ---
 
-## 11. Repository layout
+## 11. Load generation
+
+Useful for populating the Grafana panels and giving the HPA something to scale
+against. Both scripts target the same URL and report the same figures.
+
+```bash
+# Linux / macOS / Git Bash
+URL=http://localhost:3000/api/tickets REQUESTS=500 ./scripts/load-test.sh
+
+# Windows PowerShell
+.\scripts\load-test.ps1 -Url http://localhost:3000/api/tickets -Requests 500
+```
+
+Both exit non-zero if any request fails, so they double as CI smoke tests.
+
+---
+
+## 12. Repository layout
 
 ```text
 session21-python/
