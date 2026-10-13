@@ -140,6 +140,18 @@ npm install
 npm run dev        # http://localhost:5173, proxies /api to :8000
 ```
 
+### Option D — serve the production build without Docker
+
+Useful when you want to check the real bundle but have no container runtime.
+`serve-dist.mjs` reproduces what Nginx does in the container — it serves `dist/`
+and proxies `/api` to the backend:
+
+```bash
+cd frontend
+npm run build
+node serve-dist.mjs 3000 8000     # UI on :3000, API on :8000
+```
+
 ---
 
 ## 5. Tests

@@ -45,19 +45,23 @@ module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "21.29.0"
 
-  cluster_name    = var.cluster_name
-  cluster_version = var.cluster_version
+  # NOTE: the terraform-aws-modules/eks module was restructured in v21. The v20
+  # names (cluster_name, cluster_version, cluster_endpoint_public_access,
+  # cluster_addons) were renamed to name, kubernetes_version,
+  # endpoint_public_access and addons.
+  name   = var.cluster_name
+  vpc_id = module.vpc.vpc_id
 
-  vpc_id     = module.vpc.vpc_id
-  subnet_ids = module.vpc.private_subnets
+  kubernetes_version = var.cluster_version
+  subnet_ids         = module.vpc.private_subnets
 
-  cluster_endpoint_public_access  = true
-  cluster_endpoint_private_access = true
+  endpoint_public_access  = true
+  endpoint_private_access = true
 
   # Needed once the node group IAM role is managed explicitly below.
   enable_cluster_creator_admin_permissions = true
 
-  cluster_addons = {
+  addons = {
     coredns                = {}
     kube-proxy             = {}
     vpc-cni                = {}
