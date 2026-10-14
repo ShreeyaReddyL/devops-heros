@@ -217,14 +217,32 @@ terraform destroy   # required after the evaluation
 
 ## 8. Kubernetes + Helm
 
+**Local cluster (minikube on Linux):**
+
 ```bash
+# inside Ubuntu/WSL
+minikube start --driver=docker --cpus=2 --memory=4096 --kubernetes-version=v1.34.0
+
+docker build -t campusfix-backend:local  ./backend
+docker build -t campusfix-frontend:local ./frontend
+minikube image load campusfix-backend:local campusfix-frontend:local
+
 kubectl apply -f k8s/namespace.yaml
 
 helm upgrade --install campusfix ./helm/campusfix \
   -n campusfix --create-namespace \
-  -f ./helm/campusfix/values-prod.yaml \
-  --set backend.tag=<commit-sha> \
-  --set frontend.tag=<commit-sha>
+  --set backend.image=campusfix-backend  --set backend.tag=local  --set backend.imagePullPolicy=IfNotPresent \
+  --set frontend.image=campusfix-frontend --set frontend.tag=local --set frontend.imagePullPolicy=IfNotPresent \
+  --set ingress.enabled=true --set ingress.className=nginx --set ingress.host=campusfix.local \
+  --wait
+```
+
+In CI/AWS the images come from GHCR tagged with the commit SHA instead:
+
+```bash
+helm upgrade --install campusfix ./helm/campusfix \
+  -n campusfix -f ./helm/campusfix/values-prod.yaml \
+  --set backend.tag=<commit-sha> --set frontend.tag=<commit-sha>
 ```
 
 | Resource | Name pattern | Detail |
@@ -234,7 +252,7 @@ helm upgrade --install campusfix ./helm/campusfix \
 | Service | `campusfix-backend` | ClusterIP :8000 |
 | Service | `campusfix-frontend` | ClusterIP :8080 |
 | Ingress | `campusfix` | `/api` → backend, `/` → frontend |
-| HPA | `campusfix-backend` | CPU 60%, 2–6 replicas |
+| HPA | `campusfix-backend` | CPU target, 2–6 replicas |
 | ServiceMonitor | `campusfix-backend` | scrapes `/metrics` every 15s |
 
 Both Deployments run with `runAsNonRoot`. The frontend learns the backend
@@ -245,12 +263,29 @@ Database credentials come from a Kubernetes Secret. Set
 `postgres.existingSecret` in production so the password is not stored in the
 chart.
 
+> **Important — the frontend image must use a numeric `USER`.** The Dockerfile
+> uses `USER 101`, not `USER nginx`. The kubelet cannot verify that a *name* is
+> non-root and refuses to start the pod with
+> `CreateContainerConfigError: container has runAsNonRoot and image has
+> non-numeric user`. Docker Compose accepts a name; Kubernetes does not.
+
+### Viewing the deployed app
+
+```bash
+kubectl get pods -n campusfix
+kubectl get svc,endpoints -n campusfix
+kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 8080:80
+curl -H "Host: campusfix.local" http://localhost:8080/
+curl -H "Host: campusfix.local" http://localhost:8080/api/tickets
+```
+
 ---
 
 ## 9. Observability
 
 ```bash
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
 helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
   -n monitoring --create-namespace \
   -f monitoring/prometheus-values.yaml
@@ -258,6 +293,27 @@ helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
 
 The ServiceMonitor carries `release: kube-prometheus-stack`; keep that in sync
 with `monitoring.release` in the chart values.
+
+```bash
+# Prometheus targets: CampusFix should show "6 / 6 up"
+kubectl port-forward -n monitoring svc/monitoring-kube-prometheus-prometheus 9090:9090
+# open http://localhost:9090/targets?search=campusfix
+
+# Grafana
+kubectl port-forward -n monitoring svc/monitoring-grafana 3000:80
+# open http://localhost:3000  (admin / <from the admin-secret>)
+```
+
+The `CampusFix API` dashboard has 7 panels driven by the metric names the
+instrumentator actually exposes (`http_requests_total`,
+`http_request_duration_seconds_bucket`). It shows total requests, request rate,
+p95 latency, scraped pod count, requests/second by handler, p95 latency by
+handler and responses by status code.
+
+> If you are port-forwarding Grafana, do **not** pipe `kubectl port-forward`
+> output through `grep`/`tee`. A forwarded port writes continuously; piping it
+> can deliver `SIGPIPE` and kill the forward mid-request, which makes the
+> Grafana SPA fail to load its lazy-loaded JS chunks.
 
 ---
 

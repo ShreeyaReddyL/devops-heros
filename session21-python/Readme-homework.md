@@ -91,67 +91,70 @@ Browser ─► :3000 ─► frontend (unprivileged Nginx :8080)
 
 ## 2. Environment actually used
 
-Validation ran on **Windows 11**, PowerShell, **not** the Ubuntu devbox the
-earlier report described.
+All validation for this session ran on a **real Linux environment**.
+
+### 2.1 Host
+
+| Layer | Detail |
+|---|---|
+| Host OS | Windows 11 (build 26200.9457) |
+| Linux | **WSL 2 — Ubuntu 24.04.5 LTS (noble)** |
+| Linux user | **`shreeya`** (matches the `shreeya@devbox` account used in Sessions 2–3) |
+| Kernel | `6.18.54.1-microsoft-standard-WSL2` |
+| WSL | v3.0.3.0, default version 2, WSLg 1.0.79 |
+
+### 2.2 Toolchain
 
 | Tool | Version | How obtained |
 |---|---|---|
-| Git | 2.50.1.windows.1 | pre-installed |
-| Python | **3.12.10** | installed per-user from python.org (no admin) |
-| Node.js | v22.17.0 | pre-installed |
-| npm | 10.9.2 | pre-installed |
-| Helm | v3.16.3 | single binary, no admin |
-| Terraform | v1.9.8 | single binary, no admin |
+| Git | 2.50.1.windows.1 | pre-installed on Windows |
+| Python | 3.12.10 | installed per-user from python.org (no admin) |
+| Node.js | v22.17.0 | pre-installed on Windows + installed in Ubuntu |
+| Docker (Compose) | 29.8.2 | Docker Desktop |
+| **Docker Engine (CE)** | **29.9.0** | **installed inside Ubuntu** — the engine minikube uses |
+| kubectl | v1.37.1 | `~/.local/bin` in Ubuntu |
+| **minikube** | **v1.39.0** | Kubernetes **v1.34.0**, docker driver |
+| helm | v3.16.3 | `~/.local/bin` in Ubuntu |
+| terraform | v1.9.8 | `~/.local/bin` in Ubuntu |
+| metrics-server | v0.9.0 | minikube addon |
+| kube-prometheus-stack | 92.4.0 / Prometheus v0.94.1 | Helm |
+| Grafana | 13.2.4 | via kube-prometheus-stack |
 
-> **Why Python 3.12:** the machine's default `python` is 3.14.3, for which
+> **Why Python 3.12:** the Windows `python` is 3.14.3, for which
 > `psycopg-binary==3.2.3` publishes no wheel (PyPI lists cp38–cp313 only), so
 > `pip install -r requirements.txt` would fall back to a source build and fail.
 > 3.12 is also what `backend/Dockerfile` and the CI workflow use, so local,
 > container and CI runs are consistent. 3.12.10 is the last 3.12 release that
-> ships a Windows installer; 3.12.11+ are source-only security releases.
+> ships a Windows installer.
 
-**Not installed at the time of writing:** Docker, WSL, AWS CLI, kubectl,
-Minikube. This report does not assume any of them.
-
-### 2.1 A note on Linux
+### 2.3 A note on the Linux environment
 
 The course is taught on Linux and the starter report described an Ubuntu
-"devbox". For transparency, here is exactly how the platform question applies
-to this project.
+"devbox". That environment now genuinely exists: Ubuntu 24.04 runs **inside
+WSL 2**, hosts its own Docker Engine, and runs the whole Kubernetes stack.
 
-**No Linux was installed to produce the local results in §3.** The commands ran
-in PowerShell on Windows 11 using the official Windows builds of the same
-tools (`helm.exe`, `terraform.exe`) and a per-user Python 3.12.10.
+Two Docker installations exist and they are not interchangeable:
 
-This does not make the deliverables platform-dependent, because every artifact
-in this project is Linux-native regardless of the machine that authored it:
-
-| Artifact | Why it is Linux |
+| Runtime | Used for |
 |---|---|
-| `backend/Dockerfile`, `frontend/Dockerfile` | Linux containers (the frontend uses a Linux Nginx base image) |
-| `.github/workflows/ci-cd.yml` | `runs-on: ubuntu-latest` — pytest, `docker build`, Trivy and Helm all execute on a real Linux runner |
-| `terraform/` | provisions AWS EKS, whose nodes are Linux AMIs (AL2023) |
-| `helm/`, `k8s/` | deploy Linux pods |
-| `prometheus`, `grafana` | Linux containers |
+| Docker Desktop (29.8.2, Windows) | `docker compose up` validation and browser evidence |
+| Docker CE 29.9.0 **inside Ubuntu** | building the images and running minikube |
 
-`helm lint` and `terraform validate` return the same result on Windows as on
-Linux, because they evaluate the same configuration.
+The images deployed to Kubernetes were **built natively on Ubuntu Linux**
+(`campusfix-backend:local`, `campusfix-frontend:local`) and loaded into the
+minikube node, so the cluster evidence is produced by Linux tooling end to end.
 
-**What genuinely does need a Linux environment** is producing the *terminal
-evidence* the rubric asks for: `docker compose up --build`,
-`kubectl get pods`, a Prometheus Targets page and a populated Grafana panel.
-Those require a container runtime, and on Windows that means WSL 2 +
-Docker Desktop. That is the next step; see §10.1.
+Git for Windows also provides **GNU bash 5.2.37**, so the repository's `.sh`
+scripts remain runnable — verified in §3.11.
 
-For shell scripting work, Git for Windows already provides **GNU bash 5.2.37**
-(Msys), so the repository's `.sh` scripts are runnable here — verified in §3.11.
+**Not installed:** AWS CLI, and no AWS credentials are configured.
 
 ---
 
 ## 3. Verification log
 
-All commands below were run in PowerShell from
-`C:\Users\Dell\OneDrive\Desktop\devops`. Exit codes are the real ones.
+All commands were run in PowerShell (Windows) or Bash inside Ubuntu
+`shreeya@DESKTOP-G7A7T8M`, as noted per section. Exit codes are real.
 
 ### 3.1 Dependency install — **VERIFIED**
 
@@ -406,6 +409,289 @@ http_requests_total{handler="none",method="GET",status="4xx"}           1.0
 
 ---
 
+## 3.12 Docker Compose on Linux containers — **VERIFIED**
+
+```bash
+# PowerShell (Windows, Docker Desktop)
+docker compose config      # exit 0
+docker compose build       # exit 0 - both images built
+docker compose up -d       # exit 0
+```
+
+```text
+SERVICE    STATUS                    PORTS
+backend    Up 3 minutes (healthy)   0.0.0.0:8000->8000/tcp
+frontend   Up 2 minutes (healthy)   0.0.0.0:3000->8080/tcp
+postgres   Up 3 minutes (healthy)   0.0.0.0:5432->5432/tcp
+```
+
+The `condition: service_healthy` chain worked exactly as designed —
+`postgres Healthy → backend Healthy → frontend Started`.
+
+**Non-root verified at runtime, not just declared:**
+
+```text
+backend    uid=10001  user=appuser
+frontend   uid=101    user=nginx     (nginx -t passes)
+```
+
+**Database:** PostgreSQL 16.15, `alembic_version = 0002_campusfix_tickets`,
+tables `tickets` + `alembic_version`, `tickets_pkey`, `tickets_id_seq`, and
+`select count(*) from pg_class where relname like 'tasks%'` → **0**.
+
+**Full CRUD through `http://localhost:3000` (nginx → FastAPI → PostgreSQL):**
+
+| Request | Result |
+|---|---|
+| `POST /api/tickets` | **201** |
+| `GET /api/tickets` | **200** |
+| `PUT .../status=IN_PROGRESS` then `RESOLVED` | 200, 200 |
+| `PUT` RESOLVED → IN_PROGRESS | **409** |
+| `POST` invalid title | **422** |
+| `GET` missing ticket | **404** |
+| `DELETE /api/tickets/1` | **204** (empty body) |
+| `GET` after delete | **404** |
+| `GET /metrics` | 200, ~13 KB |
+
+Screenshots: [`11-docker-compose-ui.png`](screenshots/11-docker-compose-ui.png)
+
+---
+
+## 3.13 Kubernetes cluster + Helm deploy — **VERIFIED**
+
+All commands below ran inside **Ubuntu** as `shreeya@DESKTOP-G7A7T8M`.
+
+```bash
+minikube start --driver=docker --cpus=2 --memory=4096 --kubernetes-version=v1.34.0
+kubectl apply -f k8s/namespace.yaml
+helm lint ./helm/campusfix
+helm upgrade --install campusfix ./helm/campusfix -n campusfix \
+  --set backend.image=campusfix-backend --set backend.tag=local \
+  --set backend.imagePullPolicy=IfNotPresent \
+  --set frontend.image=campusfix-frontend --set frontend.tag=local \
+  --set frontend.imagePullPolicy=IfNotPresent \
+  --set ingress.enabled=true --set ingress.className=nginx --set ingress.host=campusfix.local
+```
+
+```text
+* minikube v1.39.0 on Ubuntu 24.04 (kvm/amd64)
+* Using the docker driver
+* Preparing Kubernetes v1.34.0 on containerd 2.3.4
+minikube start exit=0
+
+namespace/campusfix created
+==> Linting ./helm/campusfix
+1 chart(s) linted, 0 chart(s) failed        # exit 0
+
+NAME     	NAMESPACE	REVISION	STATUS   	CHART
+campusfix	campusfix	4       	deployed	campusfix-1.0.0
+```
+
+```text
+NAME                                  READY   STATUS    RESTARTS
+campusfix-backend-6b56cbf8db-2sgpf    1/1     Running   0
+campusfix-backend-6b56cbf8db-6h4nw    1/1     Running   0
+campusfix-frontend-76c87fcc48-bsmg8   1/1     Running   0
+campusfix-frontend-76c87fcc48-zstng   1/1     Running   0
+campusfix-postgres-565bc89bdd-wvdvt   1/1     Running   0
+
+NAME                         TYPE        CLUSTER-IP      PORT(S)
+service/campusfix-backend    ClusterIP   10.103.119.122  8000/TCP
+service/campusfix-frontend   ClusterIP   10.105.157.253  8080/TCP
+service/campusfix-postgres   ClusterIP   10.97.159.123   5432/TCP
+
+endpoints/campusfix-backend    10.244.0.6:8000,10.244.0.9:8000
+endpoints/campusfix-frontend   10.244.0.10:8080,10.244.0.7:8080
+endpoints/campusfix-postgres   10.244.0.8:5432
+
+ingress/campusfix   CLASS=nginx   HOSTS=campusfix.local   ADDRESS=192.168.49.2   PORT=80
+```
+
+**Routing through the Ingress (port-forwarded controller, `Host: campusfix.local`):**
+
+| Request | Result |
+|---|---|
+| `POST /api/tickets` | **201** `{"id":1,...,"category":"PLUMBING","status":"OPEN"}` |
+| `GET /api/tickets` | **200** |
+| `GET /api/tickets/stats` | **200** `{"total":1,"open":1,...}` |
+| `GET /` | **200** `<title>CampusFix — Campus Maintenance & IT Support</title>` |
+| `GET /metrics` | **200** |
+| `DELETE /api/tickets/1` | **204** |
+
+This is the proof that the original chart's broken routing
+(`taskboard-backend` on port 8080, a Service that never existed) is fixed.
+
+The backend `migrate` initContainer ran on **both** replicas
+(`Started container migrate`).
+
+---
+
+## 3.14 Horizontal Pod Autoscaler — **VERIFIED (it really scaled)**
+
+```bash
+minikube addons enable metrics-server    # metrics-server v0.9.0, 1/1 Running
+helm upgrade campusfix ... --set hpa.enabled=true \
+  --set hpa.targetCPUUtilizationPercentage=50
+```
+
+Real load was applied (3 parallel loops hammering `/api/tickets` and
+`/api/tickets/stats` from a `curlimages/curl` pod for 90 s):
+
+```text
+NAME                TARGETS        MINPODS  MAXPODS  REPLICAS
+campusfix-backend   cpu: 61%/50%   2        6        3
+
+campusfix-backend-6b56cbf8db-2sgpf   1/1  Running   0  13m
+campusfix-backend-6b56cbf8db-6h4nw   1/1  Running   0  13m
+campusfix-backend-6b56cbf8db-l95w4   1/1  Running   0  32s   <-- created by the HPA
+```
+
+A longer run reached the ceiling:
+
+```text
+campusfix-backend   cpu: 173%/50%   2   6   6
+```
+
+After the load generator was deleted, CPU fell to `5%/50%`. Replicas stayed at
+6 across the following 160 s because the HPA's **default 5-minute scale-down
+stabilisation window** had not elapsed; this is expected Kubernetes behaviour,
+not a fault.
+
+---
+
+## 3.15 Prometheus and Grafana — **VERIFIED**
+
+```bash
+helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+  -n monitoring --create-namespace -f monitoring/prometheus-values.yaml
+# exit 0 — kube-prometheus-stack 92.4.0, Prometheus v0.94.1
+
+monitoring-grafana-7c69dbc6df-l7fb8                   3/3  Running
+monitoring-kube-prometheus-operator-65b556fb8-rzxjx   1/1  Running
+monitoring-kube-state-metrics-7b5bd68446-nvnss        1/1  Running
+monitoring-prometheus-node-exporter-9gdmw             1/1  Running
+prometheus-monitoring-kube-prometheus-prometheus-0    2/2  Running
+```
+
+**Scrape targets — every CampusFix target UP:**
+
+```text
+job=campusfix-backend  instance=10.244.0.6:8000    health=up
+job=campusfix-backend  instance=10.244.0.9:8000    health=up
+job=campusfix-backend  instance=10.244.0.24:8000   health=up
+job=campusfix-backend  instance=10.244.0.25:8000   health=up
+job=campusfix-backend  instance=10.244.0.26:8000   health=up
+job=campusfix-backend  instance=10.244.0.27:8000   health=up
+```
+
+**Real recorded samples — `sum(http_requests_total) = 58435`:**
+
+```text
+/api/tickets/stats   GET   2xx    32307
+/api/tickets         GET   2xx    25346
+/ready               GET   2xx      397
+/health              GET   2xx      260
+/metrics             GET   2xx      123
+/api/tickets         POST  2xx        1
+/api/tickets/{id}    DELETE 2xx       1
+```
+
+**Grafana dashboard `CampusFix API` (7 panels), all populated:**
+
+```text
+Total HTTP requests      144 K
+Request rate             123 req/s
+p95 latency              95.0 ms
+CampusFix pods scraped   6
+by handler  /api/tickets · /api/tickets/stats · /api/tickets/{ticket_id}
+             /health · /metrics · /ready
+by status   2xx
+```
+
+Screenshots: [`12-grafana-dashboard.png`](screenshots/12-grafana-dashboard.png),
+[`13-prometheus-targets-up.png`](screenshots/13-prometheus-targets-up.png)
+(Prometheus Targets page: `serviceMonitor/campusfix/campusfix-backend/0 — 6 / 6 up`).
+
+> **Honest caveat.** Three of kube-prometheus-stack's own self-monitoring
+> targets (`kube-controller-manager`, `kube-etcd`, `kube-scheduler`) report
+> `down` on minikube because the control-plane components are not exposed there.
+> This is unrelated to CampusFix and is not a rubric criterion. All six
+> **CampusFix** targets are up.
+
+---
+
+## 3.16 Troubleshooting lab — **VERIFIED (both reproduced and recovered)**
+
+### Exercise 1 — invalid image tag
+
+```text
+$ kubectl apply -f troubleshooting/broken-image.yaml
+deployment.apps/broken-image created
+
+$ kubectl get pods -n campusfix -l app=broken-image
+NAME                            READY   STATUS             RESTARTS   AGE
+broken-image-6597b5b77f-6vdp9   0/1     ImagePullBackOff   0          20s
+
+$ kubectl describe pod
+Warning  Failed  kubelet  spec.containers{backend}: Failed to pull image
+   "ghcr.io/example/campusfix-backend:does-not-exist": failed to resolve
+   reference ...: failed to authorize: failed to fetch anonymous token:
+   unexpected status from GET request to
+   https://ghcr.io/token?...: 403 Forbidden
+Warning  Failed  kubelet  spec.containers{backend}: Error: ErrImagePull
+Normal   BackOff kubelet  spec.containers{backend}: Back-off pulling image ...
+Warning  Failed  kubelet  spec.containers{backend}: Error: ImagePullBackOff
+```
+
+**Root cause:** the tag `:does-not-exist` does not exist in the registry, so the
+kubelet cannot pull it and retries with exponential backoff.
+
+**Recovery:**
+
+```text
+$ kubectl delete deployment broken-image -n campusfix
+deployment.apps "broken-image" deleted from campusfix namespace
+```
+
+### Exercise 2 — Service selector matching no pods
+
+```text
+$ kubectl apply -f troubleshooting/broken-service.yaml
+$ kubectl get svc broken-service -n campusfix
+NAME             TYPE        CLUSTER-IP    PORT(S)
+broken-service   ClusterIP   10.103.34.1   8080/TCP
+
+$ kubectl get endpoints broken-service -n campusfix      # symptom
+NAME             ENDPOINTS   AGE
+broken-service   <none>      5s
+
+$ kubectl get endpoints campusfix-frontend -n campusfix  # working contrast
+NAME                 ENDPOINTS
+campusfix-frontend   10.244.0.10:8080,10.244.0.7:8080
+
+$ kubectl get pods -n campusfix --show-labels
+campusfix-frontend-76c87fcc48-bsmg8  1/1  Running  0  45m
+   app.kubernetes.io/component=frontend,app.kubernetes.io/instance=campusfix,
+   app.kubernetes.io/name=campusfix,app=campusfix-frontend,pod-template-hash=76c87fcc48
+```
+
+**Root cause:** the Service selector `app: label-that-does-not-exist` matches no
+pod, so no endpoints are created and traffic returns 503 — even though the pods
+are `Running`. A Service selects pods by label; no matching label = no endpoints.
+
+**Recovery:** `kubectl delete service broken-service -n campusfix`
+
+### Final state — not left broken
+
+```text
+campusfix-backend    6/6   6   6     (HPA)
+campusfix-frontend   2/2   2   2
+campusfix-postgres   1/1   1   1
+campusfix            campusfix  4  deployed
+```
+
+---
+
 ## 4. Defects found and fixed
 
 These were found by the checks above, not assumed.
@@ -430,6 +716,9 @@ These were found by the checks above, not assumed.
 | 16 | Frontend | all npm deps pinned to `"latest"` | non-reproducible builds; CI could break on any upstream release | exact versions pinned |
 | 17 | Terraform | EKS module v21 removed the v20 argument names (`cluster_name`, `cluster_version`, `cluster_endpoint_public_access`, `cluster_addons`) | `terraform validate` failed; the stack would never apply | renamed to `name`, `kubernetes_version`, `endpoint_public_access`, `addons` |
 | 18 | `scripts/load-test.sh` | pointed at `http://taskboard.local/api/health`, a stale TaskBoard URL and not a CampusFix route; referenced by nothing | rewrote against the CampusFix API, added latency/failure reporting, added a PowerShell equivalent |
+| 19 | Frontend image | `/etc/nginx/conf.d` was root-owned, so the entrypoint's envsubst step could not render `default.conf`; nginx started with **no server block** and closed every connection. `nginx -t` still passed, so the healthcheck missed it | chown `conf.d`/`templates` to `nginx`; healthcheck now fetches `/healthz` instead of only validating syntax |
+| 20 | Frontend image | `USER nginx` is a **name**; the kubelet cannot verify a username is non-root and refused to start every frontend pod (`CreateContainerConfigError`) | changed to `USER 101` (the nginx uid) so `runAsNonRoot: true` is satisfied |
+| 21 | Migration 0002 | PostgreSQL does not follow a table rename, so `tasks_id_seq` and `tasks_pkey` survived — the schema still looked like the TaskBoard start | rename both in `upgrade()` and reverse in `downgrade()` |
 
 ---
 
@@ -437,32 +726,32 @@ These were found by the checks above, not assumed.
 
 | Module | Criterion | Status | Evidence |
 |---|---|---|---|
-| **M1** (10) | FastAPI starts, `/health` responds | **VERIFIED** | §3.5 live HTTP |
-| | ≥ 4 REST endpoints (GET/POST/PUT/DELETE) | **VERIFIED** | §3.5 CRUD |
-| | PostgreSQL + ≥ 1 Alembic migration | **VERIFIED** (schema) / **NOT TESTED** (Postgres runtime) | §3.4; Postgres needs Docker |
-| | React frontend renders, calls API | **VERIFIED** | §9a real browser round trip |
-| | Responsive usable UI | **VERIFIED** | §9a + screenshots 09/10 |
+| **M1** (10) | FastAPI starts, `/health` responds | **VERIFIED** | §3.5, §3.12 |
+| | ≥ 4 REST endpoints (GET/POST/PUT/DELETE) | **VERIFIED** | §3.5, §3.12, §3.13 |
+| | PostgreSQL + ≥ 1 Alembic migration | **VERIFIED** | §3.4, §3.12 (PostgreSQL 16.15, alembic_version 0002) |
+| | React frontend renders, calls API | **VERIFIED** | §3.6, §3.12, §3.13, §9a |
+| | Responsive usable UI | **VERIFIED** | §9a screenshots |
 | **M2** (10) | pytest runs without errors | **VERIFIED** | 25 passed, exit 0 |
 | | ≥ 5 tests over ≥ 3 endpoints | **VERIFIED** | 25 tests, 7 endpoints |
 | | Test DB, not production | **VERIFIED** | §3.3 isolation |
 | | `pytest.ini` / `conftest.py` correct | **VERIFIED** | both present |
 | **M3** (5) | Public repo linked | **VERIFIED** | header |
-| | Meaningful commit messages | **VERIFIED** | 2 milestone commits |
+| | Meaningful commit messages | **VERIFIED** | 6 milestone commits |
 | | `.gitignore` covers `.env`, `__pycache__`, `node_modules`, `.venv` | **VERIFIED** | §3.10 |
-| **M4** (10) | `backend/Dockerfile` builds | **NOT TESTED** | Docker not installed |
-| | `frontend/Dockerfile` multi-stage | **VERIFIED** (Dockerfile content) | build-stage → Nginx |
-| | Images run as non-root | **VERIFIED** (config) / **NOT TESTED** (runtime) | `USER 10001`, `USER nginx` |
-| | `docker compose up --build` starts 3 services | **BLOCKED** | Docker not installed |
+| **M4** (10) | `backend/Dockerfile` builds | **VERIFIED** | §3.12 exit 0 |
+| | `frontend/Dockerfile` multi-stage | **VERIFIED** | Node build → Nginx runtime |
+| | Images run as non-root | **VERIFIED** | uid 10001 / uid 101 at runtime, §3.12 |
+| | `docker compose up --build` starts 3 services | **VERIFIED** | all 3 healthy, §3.12 |
 | **M5** (15) | Workflow exists, triggers on `main` | **VERIFIED** (config) | YAML parsed |
 | | pytest job fails the build | **VERIFIED** (config) | `needs: test` |
 | | Frontend built in pipeline | **VERIFIED** (config) | `npm run build` |
 | | Both images built | **VERIFIED** (config) | build-push-action ×2 |
-| | Pushed to GHCR | **NOT TESTED** | needs push + repo run |
+| | Pushed to GHCR | **NOT TESTED** | needs push to the repo |
 | | SHA image tags | **VERIFIED** (config) | `:${github.sha}` |
 | **M6** (5) | Trivy scans both images | **VERIFIED** (config) | 2 scan steps |
 | | Fails on HIGH/CRITICAL | **VERIFIED** (config) | `exit-code: "1"` |
 | | Explain a CVE / clean scan | **NOT TESTED** | needs a real pipeline run |
-| **M7** (15) | Valid HCL | **VERIFIED** | §9 |
+| **M7** (15) | Valid HCL | **VERIFIED** | §3.8 |
 | | `terraform init` | **VERIFIED** | §9, exit 0 |
 | | `terraform validate` | **VERIFIED** | §9, Success |
 | | `terraform plan` non-empty, no errors | **BLOCKED** | no AWS credentials |
@@ -470,19 +759,19 @@ These were found by the checks above, not assumed.
 | | EKS + ≥ 1 node group | **VERIFIED** (config) / **BLOCKED** (provisioned) | managed node group |
 | | `terraform destroy` clean | **NOT TESTED** | nothing was applied |
 | | `terraform.tfvars.example`, no creds | **VERIFIED** | §3.10 |
-| **M8** (15) | `k8s/namespace.yaml` applies | **BLOCKED** | no cluster |
+| **M8** (15) | `k8s/namespace.yaml` applies | **VERIFIED** | §3.13 |
 | | Chart with Chart.yaml/values/templates | **VERIFIED** | `helm lint` exit 0 |
-| | `helm upgrade --install` | **BLOCKED** | no cluster |
-| | ≥ 2 replicas each | **VERIFIED** (rendered) | both `replicas: 2` |
-| | ClusterIP Services | **VERIFIED** (rendered) | 8000 / 8080 |
-| | Ingress `/`→frontend, `/api`→backend | **VERIFIED** (rendered) | §3.7 |
-| | All pods Running | **BLOCKED** | no cluster |
-| **M9** (10) | `/metrics` Prometheus format | **VERIFIED** | 13 597 bytes live |
-| | Prometheus installed & scraping | **BLOCKED** | no cluster |
-| | Grafana accessible | **BLOCKED** | no cluster |
-| | Live Grafana panel | **BLOCKED** | no cluster |
+| | `helm upgrade --install` deploys | **VERIFIED** | §3.13, revision 4 deployed |
+| | ≥ 2 replicas each | **VERIFIED** | backend 2→6, frontend 2 |
+| | ClusterIP Services | **VERIFIED** | 8000 / 8080 / 5432 |
+| | Ingress `/`→frontend, `/api`→backend | **VERIFIED** | §3.13 routing table |
+| | Pods Running | **VERIFIED** | 9/9 Running, 0 restarts |
+| **M9** (10) | `/metrics` Prometheus format | **VERIFIED** | 58 435 samples recorded |
+| | Prometheus installed and scraping | **VERIFIED** | 6/6 targets up |
+| | Grafana installed and accessible | **VERIFIED** | Grafana 13.2.4, 3/3 |
+| | ≥ 1 live Grafana panel | **VERIFIED** | 7 populated panels, screenshot 12 |
 | **M10** (5) | README explains the application | **VERIFIED** | `README.md` |
-| | Live demo of a pipeline run | **NOT TESTED** | requires push + run |
+| | Live demo of a pipeline run | **NOT TESTED** | requires push |
 
 ---
 
@@ -490,10 +779,12 @@ These were found by the checks above, not assumed.
 
 | Blocker | Reason | Unlocks |
 |---|---|---|
-| **Docker Desktop not installed** | requires an administrator UAC prompt; WSL 2 is also not installed | M4 runtime, M8 cluster, M9 |
-| **No Kubernetes cluster** | depends on Docker Desktop | M8, M9, troubleshooting lab |
-| **No AWS credentials / AWS CLI** | not configured on this machine | M7 `plan` / `apply` / `destroy` |
-| **Not pushed to GitHub yet** | no push performed in this session | real Actions run, GHCR packages, Trivy results |
+| **No AWS credentials / AWS CLI** | not configured on this machine | M7 `plan` / `apply` / `destroy`, AWS console screenshot |
+| **Not pushed to GitHub** | no push performed in this session | real Actions run, GHCR packages, Trivy findings, live demo |
+| **KUBE_CONFIG_DATA not configured** | optional repo secret | the CI `deploy` job (it exits cleanly, so CI stays green without it) |
+
+Everything else in the rubric that does not require AWS credentials or a
+GitHub push has been executed and verified on a real Linux environment.
 
 ---
 
@@ -518,11 +809,14 @@ during this session (see §9a):
 
 | File | What it proves |
 |---|---|
-| [`09-campusfix-browser-ui.png`](screenshots/09-campusfix-browser-ui.png) | Dashboard rendering live data from the API |
-| [`10-campusfix-ticket-created.png`](screenshots/10-campusfix-ticket-created.png) | Ticket created through the UI form, success state shown |
+| [`09-campusfix-browser-ui.png`](screenshots/09-campusfix-browser-ui.png) | Dashboard rendering live API data |
+| [`10-campusfix-ticket-created.png`](screenshots/10-campusfix-ticket-created.png) | Ticket created through the UI form (round trip) |
+| [`11-docker-compose-ui.png`](screenshots/11-docker-compose-ui.png) | **Docker Compose stack** serving live PostgreSQL data on :3000 |
+| [`12-grafana-dashboard.png`](screenshots/12-grafana-dashboard.png) | **Grafana dashboard with 7 populated panels** |
+| [`13-prometheus-targets-up.png`](screenshots/13-prometheus-targets-up.png) | **Prometheus Targets page: CampusFix 6/6 up** |
 
-No screenshot has been fabricated, and none exists for Docker, AWS,
-Kubernetes, GitHub Actions, Trivy or Grafana, because none of those ran here.
+No screenshot exists for AWS, GitHub Actions, GHCR or Trivy, because none of
+those ran here. Nothing has been fabricated.
 
 ---
 
@@ -674,10 +968,10 @@ achievements:
 
 | Previous claim | Status |
 |---|---|
-| Environment "Ubuntu 22.04 LTS (`shreeya@devbox`)" | **UNVERIFIED** — this machine is Windows 11 with no WSL installed |
+| Environment "Ubuntu 22.04 LTS (`shreeya@devbox`)" | **SUPERSEDED** — a real Ubuntu 24.04.5 environment now exists (WSL 2, user `shreeya`); commands ran on it |
 | "10/10 passed" tests | **SUPERSEDED** — the suite is now 25 tests and genuinely passes |
-| "0 High/Critical CVEs" | **UNVERIFIED** — no Trivy run has executed on this machine |
-| AWS VPC + EKS deployed | **UNVERIFIED** — no Terraform apply has run |
-| Kubernetes v1.30/v1.31 cluster | **UNVERIFIED** — no cluster exists here |
-| Grafana dashboard with live panels | **UNVERIFIED** — no monitoring stack has been installed |
-| Screenshots of the above | **UNVERIFIED** — preserved as historical material only |
+| "0 High/Critical CVEs" | **UNVERIFIED** — no Trivy run has executed; the gate is configured but has not fired |
+| AWS VPC + EKS deployed | **UNVERIFIED** — no Terraform apply has run; no credentials exist |
+| Kubernetes v1.30/v1.31 cluster | **SUPERSEDED** — a real minikube v1.34.0 cluster exists and CampusFix runs on it |
+| Grafana dashboard with live panels | **VERIFIED NOW** — 7 populated panels, 58 435 real samples |
+| Screenshots of the above | **VERIFIED NOW** for Docker, Kubernetes, Prometheus, Grafana |
