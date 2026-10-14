@@ -19,6 +19,13 @@ depends_on = None
 def upgrade() -> None:
     op.rename_table("tasks", "tickets")
 
+    # Rename the identity sequence and primary-key constraint too. PostgreSQL
+    # does not follow a table rename, so they would otherwise keep the old
+    # `tasks_*` names and the schema would still look like the TaskBoard start.
+    op.execute("ALTER SEQUENCE tasks_id_seq RENAME TO tickets_id_seq")
+    op.execute("ALTER TABLE tickets ALTER COLUMN id SET DEFAULT nextval('tickets_id_seq')")
+    op.execute("ALTER TABLE tickets RENAME CONSTRAINT tasks_pkey TO tickets_pkey")
+
     op.add_column(
         "tickets",
         sa.Column("category", sa.String(length=30), nullable=False, server_default="IT_SUPPORT"),
@@ -63,3 +70,7 @@ def downgrade() -> None:
     op.drop_column("tickets", "category")
     op.drop_column("tickets", "reporter")
     op.rename_table("tickets", "tasks")
+
+    op.execute("ALTER TABLE tickets RENAME CONSTRAINT tickets_pkey TO tasks_pkey")
+    op.execute("ALTER SEQUENCE tickets_id_seq RENAME TO tasks_id_seq")
+    op.execute("ALTER TABLE tasks ALTER COLUMN id SET DEFAULT nextval('tasks_id_seq')")
