@@ -39,7 +39,14 @@ RUN chown -R nginx:nginx /etc/nginx/templates
 COPY --from=build /app/dist /usr/share/nginx/html
 RUN chown -R nginx:nginx /usr/share/nginx/html
 
-USER nginx
+# Kubernetes requires a NUMERIC uid when runAsNonRoot is set. "USER nginx" is a
+# name, and the kubelet refuses to start the container because it cannot verify
+# a non-root user from a name alone:
+#   CreateContainerConfigError: container has runAsNonRoot and image has
+#   non-numeric user (nginx), cannot verify user is non-root
+# uid 101 is the nginx user in the official image; /etc/passwd still resolves it,
+# so nginx itself keeps working.
+USER 101
 
 EXPOSE 8080
 
