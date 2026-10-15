@@ -107,7 +107,7 @@ jobs:
 
       # Security gate: the pipeline fails on HIGH or CRITICAL vulnerabilities.
       - name: Trivy scan - backend
-        uses: aquasecurity/trivy-action@0.30.0
+        uses: aquasecurity/trivy-action@v0.30.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ steps.meta.outputs.owner }}/${{ env.IMAGE_NAME }}-backend:${{ github.sha }}
           format: table
@@ -116,7 +116,7 @@ jobs:
           exit-code: "1"
 
       - name: Trivy scan - frontend
-        uses: aquasecurity/trivy-action@0.30.0
+        uses: aquasecurity/trivy-action@v0.30.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ steps.meta.outputs.owner }}/${{ env.IMAGE_NAME }}-frontend:${{ github.sha }}
           format: table
