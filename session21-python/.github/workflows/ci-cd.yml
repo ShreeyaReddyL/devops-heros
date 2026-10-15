@@ -2,7 +2,7 @@ name: CampusFix CI/CD
 
 on:
   push:
-    branches: [main]
+    branches: [main, "capstone/**"]
   pull_request:
     branches: [main]
 
