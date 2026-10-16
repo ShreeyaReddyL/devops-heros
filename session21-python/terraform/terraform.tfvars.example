@@ -1,8 +1,8 @@
 # Copy to terraform.tfvars and adjust. Never commit real credentials:
-# AWS authentication comes from the environment (~/.aws/credentials, SSO, or
-# AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY), not from this file.
+# AWS authentication comes from the AWS CLI profile selected with AWS_PROFILE,
+# not from this file. Do not add access keys or other credentials here.
 
-aws_region   = "ap-south-1"
+aws_region   = "ap-southeast-2"
 cluster_name = "campusfix-eks"
 environment  = "dev"
 
@@ -11,13 +11,14 @@ environment  = "dev"
 cluster_version = "1.35"
 
 vpc_cidr           = "10.20.0.0/16"
-availability_zones = ["ap-south-1a", "ap-south-1b"]
+availability_zones = ["ap-southeast-2a", "ap-southeast-2b"]
 
 node_instance_types = ["t3.medium"]
 node_min_size       = 2
 node_max_size       = 4
 node_desired_size   = 2
 
-# Create this IAM role using the least-privilege trust and policy in
-# AWS_SETUP.md. Terraform grants it EKS namespace access when set.
+# Keep empty for the current Free Tier project: its organization policy blocks
+# GitHub Actions OIDC. Deploy manually from the authenticated AWS CLI session.
+# Terraform grants EKS namespace access if this role is configured later.
 github_actions_deploy_role_arn = ""

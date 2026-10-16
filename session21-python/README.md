@@ -199,7 +199,7 @@ Follow [`AWS_SETUP.md`](AWS_SETUP.md) before running Terraform. In particular,
 review the AWS Pricing Calculator estimate and the complete Terraform plan
 before `terraform apply`; apply creates chargeable resources.
 
-- Region defaults to `ap-south-1`.
+- Region defaults to `ap-southeast-2`.
 - 2 public + 2 private subnets across 2 AZs, one NAT gateway.
 - EKS cluster plus one managed node group (2 × `t3.medium` by default).
 - Kubernetes version defaults to `1.35`, which is in Amazon EKS **standard**

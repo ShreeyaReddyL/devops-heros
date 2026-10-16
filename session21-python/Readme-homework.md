@@ -20,18 +20,23 @@ that was actually run and an observed exit status.
 | **NOT TESTED** | Deliberately not attempted, with the reason stated. |
 | **UNVERIFIED** | A pre-existing claim in the repository that I could not reproduce and have **not** repeated as fact. |
 
-> **State as of 2026-10-16:** the current validation below supersedes earlier
-> snapshots in this report. CampusFix has been rebuilt and run locally with
+> **State as of 2026-10-16:** CampusFix has been rebuilt and run locally with
 > Docker Compose and Minikube in WSL; real Trivy scans and live Prometheus /
 > Grafana checks were performed. The latest recorded CI run before the AWS
 > workflow update was run #5 on commit `a04d58b`; it succeeded, published both
 > SHA-tagged images to public GHCR packages, and passed both configured Trivy
-> gates. The report's screenshots 26–29 show the earlier successful run #4.
-> AWS infrastructure has not been provisioned. GitHub OIDC deployment wiring
-> and the AWS setup guide were pushed in commit `09680f5`; its Actions result
-> was not available from this environment when this report was updated. Local
-> terminal evidence 19–25 and GitHub evidence
-> 26–29 were captured on 2026-10-16; AWS evidence remains.
+> gates. Screenshots 26–29 show the earlier successful run #4. The AWS CLI
+> profile `campusfix` is now authenticated in `ap-southeast-2`. Terraform
+> `init` and `validate` pass, and a read-only plan proposes 62 additions, 0
+> changes, and 0 deletions. The plan has not been applied; no CampusFix AWS
+> resources exist. The current plan used the example variables with no GitHub
+> deployment role ARN, so it must be regenerated after OIDC setup. The account's
+> AWS Organizations SCP explicitly denies listing and reading IAM OIDC
+> providers, which blocks safe setup of the GitHub deploy role. The organization
+> administrator must resolve this or a standalone account must be used before
+> applying Terraform. Local terminal evidence 19–25 and GitHub evidence 26–29
+> were captured on 2026-10-16; AWS deployment and cleanup evidence remain
+> outstanding.
 
 ---
 
@@ -155,7 +160,9 @@ minikube node, so the cluster evidence is produced by Linux tooling end to end.
 Git for Windows also provides **GNU bash 5.2.37**, so the repository's `.sh`
 scripts remain runnable — verified in §3.11.
 
-**Not installed:** AWS CLI, and no AWS credentials are configured.
+**AWS CLI:** 2.38.1 in Ubuntu WSL. The `campusfix` profile is authenticated
+with temporary credentials in `ap-southeast-2`; no long-lived AWS keys are
+stored in the repository. No CampusFix AWS resources have been provisioned.
 
 ---
 
@@ -352,8 +359,11 @@ terraform fmt           # reformatted
 terraform fmt -check    # RE-RUN: EXIT=0
 ```
 
-`terraform init` result is recorded in §9. `terraform plan` requires AWS
-credentials and is **BLOCKED** (§10).
+`terraform init` and `terraform validate` succeeded after AWS authentication.
+The read-only `terraform plan` succeeded with 62 additions, 0 changes, and 0
+deletions; it is saved temporarily in Ubuntu at `/tmp/campusfix.tfplan`. No
+resources were applied. The plan must be regenerated after the GitHub OIDC role
+ARN is configured.
 
 ### 3.9 Workflow and Compose syntax — **VERIFIED**
 
@@ -797,9 +807,9 @@ These were found by the checks above, not assumed.
 | **M7** (15) | Valid HCL | **VERIFIED** | §3.8 |
 | | `terraform init` | **VERIFIED** | §9, exit 0 |
 | | `terraform validate` | **VERIFIED** | §9, Success |
-| | `terraform plan` non-empty, no errors | **BLOCKED** | no AWS credentials |
-| | VPC with ≥ 2 public subnets | **VERIFIED** (config) / **BLOCKED** (provisioned) | 2 public + 2 private |
-| | EKS + ≥ 1 node group | **VERIFIED** (config) / **BLOCKED** (provisioned) | managed node group |
+| | `terraform plan` non-empty, no errors | **VERIFIED** | 62 additions, 0 changes/deletions; screenshot still needed |
+| | VPC with ≥ 2 public subnets | **VERIFIED** (plan) / **NOT PROVISIONED** | 2 public + 2 private |
+| | EKS + ≥ 1 node group | **VERIFIED** (plan) / **NOT PROVISIONED** | EKS 1.35, managed node group, 2 × `t3.medium` |
 | | `terraform destroy` clean | **NOT TESTED** | nothing was applied |
 | | `terraform.tfvars.example`, no creds | **VERIFIED** | §3.10 |
 | **M8** (15) | `k8s/namespace.yaml` applies | **VERIFIED** | §3.13 |
@@ -814,7 +824,7 @@ These were found by the checks above, not assumed.
 | | Grafana installed and accessible | **VERIFIED** | local Grafana dashboard screenshot 17 |
 | | ≥ 1 live Grafana panel | **VERIFIED** | five populated panels, screenshot 17 |
 | **M10** (5) | README explains the application | **VERIFIED** | `README.md` |
-| | Live demo of a pipeline run and deployment update | **PIPELINE VERIFIED; DEPLOYMENT PENDING** | run #4 is green; deployment was skipped because the workflow is `main`-only and no AWS EKS deploy integration is configured |
+| | Live demo of a pipeline run and deployment update | **PIPELINE VERIFIED; DEPLOYMENT PENDING** | Existing CI/GHCR evidence is green; AWS OIDC role, cluster bootstrap, and a successful EKS deployment run remain pending |
 
 ---
 
@@ -822,8 +832,9 @@ These were found by the checks above, not assumed.
 
 | Blocker | Reason | Unlocks |
 |---|---|---|
-| **AWS account credentials / CLI not configured** | No AWS credentials are connected to this workspace and no resources have been provisioned; the user plans to use a personal account with introductory credits | M7 plan/apply/destroy and AWS evidence |
-| **AWS deployment is not enabled yet** | No AWS account or cluster exists, and the OIDC role and GitHub repository variable are not configured | AWS plan/apply, bootstrap, and deployment evidence |
+| **AWS Organizations SCP blocks IAM OIDC inspection** | `iam:ListOpenIDConnectProviders` and `iam:GetOpenIDConnectProvider` are explicitly denied; attaching `AdministratorAccess` cannot override the organization policy | Organization administrator must allow required OIDC/role actions, or use a standalone account |
+| **AWS infrastructure not provisioned** | A non-empty Terraform plan is available, but apply is paused while required IAM access is unresolved; no resources have been applied | Resolve account policy, regenerate the OIDC-enabled plan, review cost, then provision and destroy |
+| **GitHub OIDC deployment not enabled** | Deployment role, `AWS_ROLE_ARN` repository variable, and EKS bootstrap are not configured | Configure OIDC after SCP resolution, add the role to Terraform, bootstrap EKS, and verify the Actions deployment |
 
 The application, tests, Docker, local Kubernetes and observability layers were
 verified in WSL. Genuine terminal captures are saved as screenshots 19–25;
@@ -929,8 +940,18 @@ terraform fmt -check     # EXIT=0
 
 **`terraform validate` → Success, exit 0. `terraform fmt -check` → exit 0.**
 
-`terraform plan` and `terraform apply` were **not run** — no AWS credentials are
-configured on this machine, and `apply` creates billable resources (§10.3).
+The AWS profile `campusfix` was authenticated in Ubuntu using temporary CLI
+credentials. `terraform plan -input=false -var-file=terraform.tfvars.example`
+completed successfully: **62 to add, 0 to change, 0 to destroy**. Its plan file
+is temporary at `/tmp/campusfix.tfplan`; the `github_actions_deploy_role_arn`
+example variable is empty, so the plan does not yet grant GitHub Actions
+namespace access. Read-only IAM checks then returned explicit SCP denials for
+listing and reading OIDC providers. No role or provider was created, no
+`terraform apply` was run, and no AWS resources were created. Apply remains
+paused until an organization administrator resolves the restriction or a
+standalone account is used. The plan output still needs a genuine terminal
+screenshot for submission. The cost floor and exclusions are documented in
+[`AWS_SETUP.md`](AWS_SETUP.md).
 
 ---
 
@@ -964,16 +985,20 @@ is now captured in screenshots 26–29. AWS evidence remains outstanding.
 
 GitHub Actions and GHCR have been demonstrated by runs #4 and #5. Commit
 `09680f5` adds an AWS EKS deployment path using GitHub OIDC and a manual
-workflow trigger. The GitHub Actions run for that push was not confirmed here.
-Deployment remains unavailable until the AWS account, EKS cluster, bootstrap
-resources, and `AWS_ROLE_ARN` repository variable are configured.
+workflow trigger. The workflow accepts pushes from the capstone branch, but
+the deployment job has not run successfully. The current account's SCP blocks
+OIDC-provider inspection; resolve that policy or use a standalone account
+before creating the role and setting `AWS_ROLE_ARN`. EKS provisioning,
+bootstrap, and a successful rollout are also pending.
 
-AWS remains the next work phase. The user's personal AWS account and
-introductory credits have not yet been created or connected, and no resources
-have been provisioned. M7 plan/apply/destroy and AWS console evidence remain
-outstanding. See [`AWS_SETUP.md`](AWS_SETUP.md) for account-plan tradeoffs,
-regional cost review, and the deployment steps. Do not apply Terraform until
-the plan and cost estimate have been reviewed.
+AWS remains the next work phase. The account and temporary CLI profile are
+ready, and the initial plan has been reviewed for resource scope. An AWS
+Organizations SCP currently blocks reading IAM OIDC providers, so role setup
+and apply are paused. No AWS resources have been provisioned. After the
+organization policy is resolved or a standalone account is selected, the
+OIDC-enabled Terraform plan, cost review, apply, EKS bootstrap, Actions
+deployment, and destroy evidence remain outstanding. See [`AWS_SETUP.md`](AWS_SETUP.md)
+for the regional cost floor, plan steps, deployment setup, and cleanup procedure.
 
 ---
 
@@ -984,7 +1009,7 @@ the plan and cost estimate have been reviewed.
 | Environment `Ubuntu 22.04` on a hosted devbox | **SUPERSEDED** — current environment is Ubuntu 24.04.5 under WSL 2 |
 | `10/10 passed` tests | **SUPERSEDED** — current suite has 25 passing tests |
 | Zero HIGH/CRITICAL findings under configured Trivy gate | **VERIFIED** locally and in Actions run #4; see §3.17–§3.18 |
-| AWS VPC + EKS deployed | **NOT TRUE / NOT DONE** — no AWS account credentials or Terraform apply exist |
+| AWS VPC + EKS deployed | **NOT DONE** — the non-empty plan is verified, but Terraform has not been applied |
 | Kubernetes v1.30/v1.31 cluster | **SUPERSEDED** — local Minikube v1.34.0 was used |
 | Six CampusFix scrape targets and seven dashboard panels | **HISTORICAL** — current run scrapes 2 backend targets and displays five current panels |
 | Local terminal screenshots | **CAPTURED** — screenshots 19–25 in §8 |

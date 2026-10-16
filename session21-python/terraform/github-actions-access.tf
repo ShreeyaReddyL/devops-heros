@@ -2,7 +2,7 @@ resource "aws_eks_access_entry" "github_actions_deploy" {
   count = var.github_actions_deploy_role_arn == "" ? 0 : 1
 
   cluster_name  = module.eks.cluster_name
-  principal_arn  = var.github_actions_deploy_role_arn
+  principal_arn = var.github_actions_deploy_role_arn
   type          = "STANDARD"
   user_name     = "github-actions-campusfix"
 }

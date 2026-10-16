@@ -1,7 +1,7 @@
 variable "aws_region" {
   description = "AWS region to provision the CampusFix infrastructure in."
   type        = string
-  default     = "ap-south-1"
+  default     = "ap-southeast-2"
 }
 
 variable "cluster_name" {
@@ -35,7 +35,7 @@ variable "vpc_cidr" {
 variable "availability_zones" {
   description = "Availability zones used for the public and private subnets."
   type        = list(string)
-  default     = ["ap-south-1a", "ap-south-1b"]
+  default     = ["ap-southeast-2a", "ap-southeast-2b"]
 }
 
 variable "node_instance_types" {

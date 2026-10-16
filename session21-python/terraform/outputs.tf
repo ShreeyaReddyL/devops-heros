@@ -13,11 +13,6 @@ output "cluster_version" {
   value       = module.eks.cluster_version
 }
 
-output "oidc_provider_arn" {
-  description = "OIDC provider ARN, used for IAM roles for service accounts."
-  value       = module.eks.oidc_provider.arn
-}
-
 output "vpc_id" {
   description = "ID of the VPC hosting the cluster."
   value       = module.vpc.vpc_id

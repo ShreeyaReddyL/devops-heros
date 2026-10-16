@@ -2,11 +2,20 @@
 
 ## Current state
 
-- The AWS account has **not** been created or connected here.
-- No AWS resources have been provisioned.
-- Terraform now includes the EKS EBS CSI add-on and namespace-scoped GitHub
-  Actions access. The CI workflow uses GitHub OIDC; it does not need a stored
-  AWS access key or kubeconfig.
+- The AWS account exists, and the AWS CLI profile `campusfix` has successfully
+  authenticated with temporary credentials in `ap-southeast-2`. Credentials
+  remain in the local AWS config/cache and are not stored in this repository.
+- No CampusFix AWS infrastructure has been provisioned.
+- `terraform init` and `terraform validate` succeeded. The first read-only plan
+  proposed 62 additions, 0 changes, and 0 deletions. That plan included an IAM
+  OIDC provider and must not be applied because an AWS Organizations SCP denies
+  OIDC-provider operations. No CampusFix resources have been created.
+- Terraform has since been changed to disable IRSA and give the EBS CSI driver
+  AWS access through EKS Pod Identity. Regenerate and inspect the plan; it must
+  not contain `aws_iam_openid_connect_provider` before applying.
+- The same SCP prevents GitHub Actions from using OIDC to deploy to AWS. Keep
+  `github_actions_deploy_role_arn` empty and deploy manually with Helm from the
+  authenticated Ubuntu session. Do not put long-lived AWS keys in GitHub.
 - The production Helm values target an AWS Application Load Balancer (ALB).
 - A push to the deployment branch starts the workflow after the AWS role is
   configured. The workflow also has a manual trigger; GitHub exposes manual
@@ -37,24 +46,46 @@ After signup:
 2. In Billing, confirm the plan and credit balance. Create budget email alerts
    (for example at $25, $50, and $75). Budget alerts notify you; they are not
    a hard spending cap.
-3. Avoid enabling AWS Organizations or Control Tower for this project. AWS
-   says these can upgrade a Free account plan and immediately expire the free
-   plan credits.
-4. If EKS is unavailable in the plan shown to you, stop and tell me what the
-   console says before upgrading or provisioning anything.
+3. EKS is listed as available in the new Free Tier experience, but usage still
+   consumes credits. Do not activate Advanced AWS features just to bypass the
+   OIDC restriction: AWS requires an account upgrade, removes any project spend
+   limit, and says activation cannot be reversed. Review the account plan and
+   credits first.
+4. If EKS or a required action is unavailable in the plan shown to you, stop
+   before provisioning and review the account policy and cost impact.
 
 ### Cost to review before Terraform apply
 
-The current stack includes an EKS control plane, two `t3.medium` EC2 nodes, a
-NAT gateway, an internet-facing ALB, public IPv4 addresses, and a 20 GiB EBS
-volume. Those are separate billable resources. AWS currently lists EKS standard
-support at $0.10 per cluster-hour and gives a NAT gateway example of $0.045 per
-hour before data processing. Those two example rates alone are about $0.145 per
-hour, or about $106 for 730 hours, before nodes, ALB, storage, IPs, and data
-transfer. Actual prices vary by region and usage. Use the [AWS Pricing
-Calculator](https://calculator.aws/#/) for `ap-south-1` and this resource list
-before applying. Credits are finite: a Paid plan can bill beyond them, while a
-Free plan ends when they are depleted.
+The planned stack includes an EKS control plane, two `t3.medium` EC2 nodes, a
+NAT gateway, an internet-facing ALB, public IPv4 addresses, worker EBS root
+volumes, a database PVC, a KMS key, and CloudWatch logs. Those are separate
+billable resources. For a 730-hour month, the current rates for just three
+always-on components are approximately:
+
+| Component | Calculation | Monthly subtotal |
+|---|---:|---:|
+| EKS standard-support control plane | $0.10/hour × 730 | $73.00 |
+| One Sydney NAT gateway | $0.059/hour × 730 | $43.07 |
+| Two Sydney `t3.medium` Linux nodes | $0.0528/hour × 2 × 730 | $77.09 |
+| **Baseline for these three components** |  | **$193.16** |
+
+This is a floor, not a full estimate. It excludes the ALB hourly and capacity
+charges, public IPv4 addresses, EBS, KMS, log ingestion/storage, NAT data
+processing, and data transfer. AWS charges NAT gateways by the hour and by
+processed data; ALBs have hourly and LCU charges; public IPv4 addresses are
+charged separately. The AWS Price List API returned the `t3.medium` Sydney
+rate used above. See [EKS pricing](https://aws.amazon.com/eks/pricing/), the
+[Sydney NAT gateway pricing example](https://aws.amazon.com/network-firewall/pricing/),
+[VPC pricing](https://aws.amazon.com/vpc/pricing/), [ELB
+pricing](https://aws.amazon.com/elasticloadbalancing/pricing/), and the [AWS
+Price List Query API](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/using-price-list-query-api.html).
+
+The displayed $100 credit balance is below this full-month baseline. Confirm
+which charges the account plan credits cover, use the [AWS Pricing
+Calculator](https://calculator.aws/#/) for `ap-southeast-2`, and run the stack
+only for the evidence window. Do not leave the cluster running unattended.
+After evidence capture, follow the cleanup steps below and check Billing for
+remaining resources.
 
 We should run EKS only for the class demo/evidence window and destroy the stack
 afterward. Do not apply Terraform until we have reviewed the actual plan and
@@ -81,124 +112,76 @@ option with AWS CLI already installed. AWS documents both in [CLI
 authentication](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-authentication.html)
 and [CloudShell authentication](https://docs.aws.amazon.com/cloudshell/latest/userguide/working-with-aws-cli.html).
 
-Once the account and a non-root console identity are ready, in Ubuntu run:
+The AWS CLI profile `campusfix` is already signed in. If its session expires,
+sign in again from Ubuntu/WSL with the remote flow:
 
 ```bash
-aws login --profile campusfix
-export AWS_PROFILE=campusfix
-export AWS_DEFAULT_REGION=ap-south-1
-aws sts get-caller-identity
+aws login --profile campusfix --remote
+aws sts get-caller-identity --profile campusfix
 ```
 
-The last command should show the account you just created. If `aws login` is
-not available, stop rather than falling back to root access keys; we can use
-CloudShell or install/update the CLI together.
+The Terraform AWS provider uses the AWS SDK for Go v2, which AWS currently
+lists as not supporting the `aws login` credentials provider directly. Use
+AWS CLI's `credential_process` bridge for Terraform instead of creating
+long-term access keys:
 
-## 3. Create a GitHub OIDC deployment role
-
-This role lets only GitHub Actions from this repository's two deployment
-branches request temporary AWS credentials. It is separate from the EKS OIDC
-provider Terraform creates for the EBS driver and AWS Load Balancer Controller.
-
-1. In AWS IAM, add an OpenID Connect identity provider with URL
-   `https://token.actions.githubusercontent.com` and audience
-   `sts.amazonaws.com`.
-2. Create a role for web identity using that provider.
-3. Restrict its trust policy to the repository and branches below. GitHub
-   repositories can use either the legacy or immutable subject format. Check
-   the repo's creation date and OIDC subject setting; use **only** the matching
-   format. For immutable subjects, get the numeric IDs from
-   `https://api.github.com/repos/ShreeyaReddyL/devops-heros` and replace the
-   placeholders. Do not use a wildcard for the branch or repository.
-
-Legacy subject values:
-
-```text
-repo:ShreeyaReddyL/devops-heros:ref:refs/heads/main
-repo:ShreeyaReddyL/devops-heros:ref:refs/heads/capstone/campusfix-session21
+```bash
+aws configure set credential_process \
+  "aws configure export-credentials --profile campusfix --format process" \
+  --profile campusfix-terraform
+aws configure set region ap-southeast-2 --profile campusfix-terraform
+aws sts get-caller-identity --profile campusfix-terraform
 ```
 
-Immutable subject values:
+The final command should identify the same AWS account and role. Terraform
+commands must use `AWS_PROFILE=campusfix-terraform`. AWS documents the
+credential-process workaround in [login credential provider
+support](https://docs.aws.amazon.com/sdkref/latest/guide/feature-login-credentials.html).
 
-```text
-repo:ShreeyaReddyL@<OWNER_ID>/devops-heros@<REPO_ID>:ref:refs/heads/main
-repo:ShreeyaReddyL@<OWNER_ID>/devops-heros@<REPO_ID>:ref:refs/heads/capstone/campusfix-session21
-```
+## 3. GitHub Actions deployment status
 
-The role trust policy structure is:
+The Free Tier project SCP explicitly denies
+`iam:ListOpenIDConnectProviders`; the original Terraform plan also showed that
+it would create an IAM OIDC provider. Do not try to create a GitHub OIDC
+provider or apply a plan that contains `aws_iam_openid_connect_provider`.
+Account-level `AdministratorAccess` cannot override an SCP deny.
 
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Principal": {
-      "Federated": "arn:aws:iam::<ACCOUNT_ID>:oidc-provider/token.actions.githubusercontent.com"
-    },
-    "Action": "sts:AssumeRoleWithWebIdentity",
-    "Condition": {
-      "StringEquals": {
-        "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-        "token.actions.githubusercontent.com:sub": [
-          "<MATCHING_SUBJECT_FOR_MAIN>",
-          "<MATCHING_SUBJECT_FOR_CAPSTONE_BRANCH>"
-        ]
-      }
-    }
-  }]
-}
-```
+For this Free Tier deployment, leave
+`github_actions_deploy_role_arn = ""` in the ignored `terraform.tfvars` file.
+GitHub Actions can still test the code, build and scan the images, and publish
+them to GHCR. Its optional AWS deploy job will remain skipped. Deploy to EKS
+manually from the Ubuntu session with the temporary `campusfix-terraform`
+profile. Do not store AWS access keys or a kubeconfig in GitHub.
 
-Attach a custom permission policy that allows only EKS cluster discovery for
-this cluster. Replace `<ACCOUNT_ID>` with your AWS account ID:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Action": "eks:DescribeCluster",
-    "Resource": "arn:aws:eks:ap-south-1:<ACCOUNT_ID>:cluster/campusfix-eks"
-  }]
-}
-```
-
-The role does not get broad AWS permissions. Terraform will grant it the EKS
-`AmazonEKSAdminPolicy` scoped only to the `campusfix` namespace. This lets the
-workflow deploy the application without permission to administer the whole
-cluster. GitHub's [AWS OIDC guide](https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-aws)
-describes the provider URL, audience, subject condition, and `id-token: write`
-permission used by the workflow.
-
-Copy the role ARN (not a key) into `session21-python/terraform/terraform.tfvars`
-as `github_actions_deploy_role_arn`. That file is Git-ignored. The example
-file contains an empty value intentionally.
+AWS EKS Pod Identity is used for the EBS CSI and Load Balancer Controller
+workloads. Pod Identity associates an IAM role directly with a Kubernetes
+service account and does not require an IAM OIDC provider. See [EKS Pod
+Identity](https://docs.aws.amazon.com/eks/latest/userguide/pod-identities.html).
 
 ## 4. Review Terraform before creating resources
 
-From Ubuntu, in `session21-python/terraform`:
+From Ubuntu, in `session21-python/terraform`, first ensure the
+`campusfix-terraform` profile passed the identity check above. Then run:
 
 ```bash
-cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars and set github_actions_deploy_role_arn to the role ARN.
+export AWS_PROFILE=campusfix-terraform
+export AWS_DEFAULT_REGION=ap-southeast-2
 terraform init
-terraform fmt -recursive
 terraform validate
-terraform plan -out=campusfix.tfplan
+terraform plan -var-file=terraform.tfvars.example -out=campusfix.tfplan
 ```
 
-The plan should include the VPC, EKS cluster and node group, EBS CSI driver,
-and the GitHub Actions access entry. `terraform plan` does not show the AWS
-bill, so compare this plan with the Pricing Calculator estimate. Share the
-plan summary and estimate for review before applying; redact account-sensitive
-details if desired. **Do not run `terraform apply` until the plan and cost are
-reviewed.**
+This plan should include the VPC, EKS cluster and node group, EBS CSI driver,
+and Pod Identity association. It must not include an
+`aws_iam_openid_connect_provider`. `terraform plan` does not show the AWS bill,
+so compare the plan with the Pricing Calculator estimate. Review the summary
+before applying; redact account-sensitive details if sharing the output.
 
 After the review and the user's go-ahead:
 
 ```bash
 terraform apply campusfix.tfplan
-aws eks update-kubeconfig --region ap-south-1 --name campusfix-eks
+aws eks update-kubeconfig --region ap-southeast-2 --name campusfix-eks
 kubectl get nodes
 ```
 
@@ -216,28 +199,55 @@ an in-cluster Nginx ingress controller. The controller creates an internet-
 facing ALB for the `/` and `/api` routes. AWS documents this Helm installation
 and its IAM policy in [Install AWS Load Balancer Controller with Helm](https://docs.aws.amazon.com/eks/latest/userguide/lbc-helm.html).
 
-Download the current IAM policy version referenced in that AWS procedure,
-create a policy, and give it to the controller's Kubernetes service account
-using IRSA:
+Download the IAM policy for the pinned AWS Load Balancer Controller release,
+create a Pod Identity role, and associate it with the controller's service
+account. The controller supports both IRSA and EKS Pod Identity; Pod Identity
+avoids the IAM OIDC-provider operations blocked in this account.
 
 ```bash
 curl -fsSL -o /tmp/campusfix-lbc-iam-policy.json \
   https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.14.1/docs/install/iam_policy.json
-aws iam create-policy --policy-name CampusFixLoadBalancerControllerPolicy \
-  --policy-document file:///tmp/campusfix-lbc-iam-policy.json
+LBC_POLICY_ARN=$(aws iam create-policy \
+  --policy-name CampusFixLoadBalancerControllerPolicy \
+  --policy-document file:///tmp/campusfix-lbc-iam-policy.json \
+  --query 'Policy.Arn' --output text)
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-LBC_POLICY_ARN="arn:aws:iam::${ACCOUNT_ID}:policy/CampusFixLoadBalancerControllerPolicy"
-eksctl create iamserviceaccount \
-  --cluster campusfix-eks \
+EKS_CLUSTER_ARN=$(aws eks describe-cluster --name campusfix-eks \
+  --query 'cluster.arn' --output text --region ap-southeast-2)
+cat > /tmp/campusfix-lbc-pod-identity-trust.json <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {"Service": "pods.eks.amazonaws.com"},
+    "Action": ["sts:AssumeRole", "sts:TagSession"],
+    "Condition": {"StringEquals": {
+      "aws:RequestTag/eks-cluster-arn": "$EKS_CLUSTER_ARN",
+      "aws:RequestTag/kubernetes-namespace": "kube-system",
+      "aws:RequestTag/kubernetes-service-account": "aws-load-balancer-controller"
+    }}
+  }]
+}
+EOF
+aws iam create-role \
+  --role-name CampusFixLoadBalancerControllerRole \
+  --assume-role-policy-document file:///tmp/campusfix-lbc-pod-identity-trust.json
+aws iam attach-role-policy \
+  --role-name CampusFixLoadBalancerControllerRole \
+  --policy-arn "$LBC_POLICY_ARN"
+kubectl create serviceaccount aws-load-balancer-controller -n kube-system
+LBC_ROLE_ARN=$(aws iam get-role --role-name CampusFixLoadBalancerControllerRole \
+  --query 'Role.Arn' --output text)
+aws eks create-pod-identity-association \
+  --cluster-name campusfix-eks \
   --namespace kube-system \
-  --name aws-load-balancer-controller \
-  --attach-policy-arn "$LBC_POLICY_ARN" \
-  --override-existing-serviceaccounts \
-  --region ap-south-1 \
-  --approve
+  --service-account aws-load-balancer-controller \
+  --role-arn "$LBC_ROLE_ARN" \
+  --region ap-southeast-2
 ```
 
-Install the controller chart and the ALB class:
+Install the controller chart and the ALB class. The service account already
+exists and is associated through Pod Identity:
 
 ```bash
 helm repo add eks https://aws.github.io/eks-charts
@@ -248,7 +258,7 @@ helm upgrade --install aws-load-balancer-controller \
   --namespace kube-system \
   --version 1.14.0 \
   --set clusterName=campusfix-eks \
-  --set region=ap-south-1 \
+  --set region=ap-southeast-2 \
   --set vpcId="$VPC_ID" \
   --set serviceAccount.create=false \
   --set serviceAccount.name=aws-load-balancer-controller \
@@ -266,7 +276,7 @@ kubectl wait --for=condition=Available deployment/metrics-server \
   -n kube-system --timeout=180s
 ```
 
-## 6. Create the database secret and enable GitHub deployment
+## 6. Create the database secret and deploy manually
 
 Create the namespace and a private random database password. The secret is
 created in the cluster and is never written to Git:
@@ -284,22 +294,26 @@ kubectl -n campusfix create secret generic campusfix-postgres \
 unset DB_PASSWORD DATABASE_URL
 ```
 
-In the GitHub repository, open **Settings → Secrets and variables → Actions →
-Variables** and add:
+Use an image tag from a successful GitHub Actions run that published both
+images to GHCR. The GHCR packages must be public so EKS can pull them without
+storing a GitHub token in the cluster. From `session21-python/terraform`, set
+`TAG` to that run's commit SHA and deploy with Helm:
 
-| Variable | Value |
-|---|---|
-| `AWS_ROLE_ARN` | The role ARN created in §3 |
-| `AWS_REGION` | `ap-south-1` (optional; this is the workflow default) |
-| `EKS_CLUSTER_NAME` | `campusfix-eks` (optional; this is the workflow default) |
+```bash
+TAG=<successful-github-run-commit-sha>
+helm upgrade --install campusfix ../helm/campusfix \
+  --namespace campusfix \
+  --values ../helm/campusfix/values-prod.yaml \
+  --set backend.image=ghcr.io/shreeyareddyl/campusfix-backend \
+  --set backend.tag="$TAG" \
+  --set frontend.image=ghcr.io/shreeyareddyl/campusfix-frontend \
+  --set frontend.tag="$TAG" \
+  --wait --timeout 8m
+```
 
-Do not add AWS access keys or a kubeconfig. Once this workflow version is on
-the default branch, open **Actions → CampusFix CI/CD → Run workflow**, select
-`capstone/campusfix-session21`, and run it. Otherwise, push a normal commit to
-the capstone branch after adding the variable; the workflow builds and scans
-the commit, publishes both GHCR images, assumes the role through OIDC, deploys
-the Helm release, and checks the rollout. The deployment job stays skipped
-until `AWS_ROLE_ARN` exists.
+The GitHub Actions workflow still tests, builds, scans, and publishes images.
+Its AWS deploy job stays skipped because the Free Tier project SCP blocks the
+OIDC provider. Do not add static AWS access keys to GitHub Actions.
 
 When it succeeds, verify from Ubuntu:
 
@@ -316,30 +330,38 @@ public CampusFix app; test ticket creation and the `/api` route.
 ## 7. Evidence and cleanup
 
 For the AWS portion of the submission, capture genuine screenshots of the
-Terraform plan (before apply), EKS cluster and node group, healthy CampusFix
-pods/services, Helm release, ALB Ingress address and browser app, and the
-successful GitHub Actions deployment. Capture the destroy result after the
-evidence is complete. Keep AWS billing/account screenshots private unless the
-instructor specifically requests them.
+updated Terraform plan (before apply), EKS cluster and node group, healthy
+CampusFix pods/services, Helm release, ALB Ingress address and browser app,
+and the successful GitHub Actions image build/publish. The AWS deployment is
+manual because the current SCP blocks GitHub OIDC. Capture the destroy result
+after the evidence is complete. Keep AWS billing/account screenshots private
+unless the instructor specifically requests them.
 
 When the demo is finished, first remove the application so its ALB and EBS
-volume can be released, then remove the cluster:
+volume can be released, then remove the controller and cluster:
 
 ```bash
 helm uninstall campusfix -n campusfix
 # Wait until the Ingress is gone and its ALB disappears from EC2 → Load Balancers.
 helm uninstall aws-load-balancer-controller -n kube-system
-eksctl delete iamserviceaccount \
-  --cluster campusfix-eks \
-  --namespace kube-system \
-  --name aws-load-balancer-controller \
-  --region ap-south-1
+LBC_ASSOCIATION_ID=$(aws eks list-pod-identity-associations \
+  --cluster-name campusfix-eks --namespace kube-system \
+  --query "associations[?serviceAccount=='aws-load-balancer-controller'].associationId | [0]" \
+  --output text --region ap-southeast-2)
+aws eks delete-pod-identity-association --cluster-name campusfix-eks \
+  --association-id "$LBC_ASSOCIATION_ID" --region ap-southeast-2
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+LBC_POLICY_ARN="arn:aws:iam::${ACCOUNT_ID}:policy/CampusFixLoadBalancerControllerPolicy"
+aws iam detach-role-policy --role-name CampusFixLoadBalancerControllerRole \
+  --policy-arn "$LBC_POLICY_ARN"
+aws iam delete-role --role-name CampusFixLoadBalancerControllerRole
+aws iam delete-policy --policy-arn "$LBC_POLICY_ARN"
 kubectl delete -f ../k8s/storageclass-gp3.yaml
 terraform destroy
 ```
 
 Confirm the ALB is gone in EC2 → Load Balancers before destroying the cluster;
-if it remains, do not leave it running. After cleanup, remove the GitHub
-`AWS_ROLE_ARN` variable and delete the project-only IAM role, policy, and
-GitHub OIDC provider if nothing else uses them. Check Billing for remaining
-NAT gateways, load balancers, EBS volumes, snapshots, and public IPv4 addresses.
+if it remains, do not leave it running. If cleanup reports that the custom IAM
+policy has non-default versions, remove those versions before deleting its
+default policy. Check Billing for remaining NAT gateways, load balancers, EBS
+volumes, snapshots, and public IPv4 addresses.
