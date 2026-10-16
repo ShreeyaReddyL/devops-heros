@@ -23,10 +23,13 @@ that was actually run and an observed exit status.
 > **State as of 2026-10-16:** the current validation below supersedes earlier
 > snapshots in this report. CampusFix has been rebuilt and run locally with
 > Docker Compose and Minikube in WSL; real Trivy scans and live Prometheus /
-> Grafana checks were performed. AWS was not provisioned, and no Git push or
-> GitHub Actions run was performed. Historical output is identified as such;
-> Current local terminal evidence 19–25 was captured on 2026-10-16; only
-> GitHub and AWS screenshots remain outstanding in §8.
+> Grafana checks were performed. Commit `ba32c7a60b82d2491e867ef2e420a60842caefb9`
+> was pushed to `capstone/campusfix-session21`; GitHub Actions run #4 succeeded,
+> published both SHA-tagged images to public GHCR packages, and passed both
+> configured Trivy gates. The optional deploy job was skipped because this
+> workflow currently deploys only from `main`. AWS infrastructure has not been provisioned.
+> Historical output is identified as such. Local terminal evidence 19–25 and
+> GitHub evidence 26–29 were captured on 2026-10-16; AWS evidence remains.
 
 ---
 
@@ -688,8 +691,45 @@ trivy image --ignore-unfixed --severity HIGH,CRITICAL session21-python-frontend:
 ```
 
 This is local scan evidence only. The rubric asks for the Trivy output from a
-GitHub Actions run as well; that screenshot and run URL are pending because no
-push was made.
+GitHub Actions run as well. Run #4 passed both backend and frontend Trivy steps;
+the configured gate scans HIGH and CRITICAL findings (ignoring unfixed issues)
+and fails on a match. The backend report table showed zero vulnerabilities for
+the listed OS and Python package targets. See §3.18 and screenshot 27.
+
+## 3.18 GitHub Actions, Trivy, and GHCR — **VERIFIED**
+
+Commit `ba32c7a60b82d2491e867ef2e420a60842caefb9` was pushed to
+`capstone/campusfix-session21`. The real workflow run completed successfully
+in 2m 14s:
+
+| Job or result | Outcome |
+|---|---|
+| Backend tests and frontend build | **Success** |
+| Build, scan, and publish images | **Success** |
+| Trivy backend scan | **Success**; no HIGH/CRITICAL findings matched the configured gate; report table showed 0 vulnerabilities for listed targets |
+| Trivy frontend scan | **Success**; no HIGH/CRITICAL findings matched the configured gate |
+| GHCR publication | **Success**; backend and frontend images published with the full commit SHA tag |
+| Deploy to Kubernetes via Helm | **Skipped**; the job condition permits deployment only on `main`, while this run was on `capstone/campusfix-session21` |
+
+Run: [CampusFix CI/CD #4](https://github.com/ShreeyaReddyL/devops-heros/actions/runs/38886639159)
+
+Published package pages: [campusfix-backend](https://github.com/users/ShreeyaReddyL/packages/container/package/campusfix-backend) and [campusfix-frontend](https://github.com/users/ShreeyaReddyL/packages/container/package/campusfix-frontend). Both packages are public. The tag is `ba32c7a60b82d2491e867ef2e420a60842caefb9`.
+
+The workflow uses `severity: HIGH,CRITICAL`, `ignore-unfixed: true`, and
+`exit-code: "1"`; a successful scan therefore means no findings matched that
+configured gate. It does not mean the images have no vulnerabilities at every
+severity. Screenshots 26–29 show the run, backend scan output, package list, and
+backend tag page.
+
+The run also completed with non-blocking maintenance annotations: the current
+action versions emitted Node.js 20 deprecation warnings, `ubuntu-latest` emitted
+an upcoming runner-image migration notice, and checkout post-cleanup reported
+`git` exit 128. Neither job nor the workflow failed; review these annotations
+when updating the Actions versions.
+
+The workflow has not deployed this image to Kubernetes or AWS. Its deploy job
+is `main`-only and currently consumes `KUBE_CONFIG_DATA`; AWS OIDC/EKS
+deployment is a separate follow-up step.
 
 ## 4. Defects found and fixed
 
@@ -746,11 +786,11 @@ These were found by the checks above, not assumed.
 | | pytest job fails the build | **VERIFIED** (config) | `needs: test` |
 | | Frontend built in pipeline | **VERIFIED** (config) | `npm run build` |
 | | Both images built | **VERIFIED** (config) | build-push-action ×2 |
-| | Pushed to GHCR | **NOT VERIFIED** | no GitHub push or workflow run was made |
+| | Pushed to GHCR | **VERIFIED** | Actions run #4 published both public packages, §3.18 |
 | | SHA image tags | **VERIFIED** (config) | `:${github.sha}` |
 | **M6** (5) | Trivy scans both images | **VERIFIED** (config) | 2 scan steps |
 | | Fails on HIGH/CRITICAL | **VERIFIED** (config) | `exit-code: "1"` |
-| | Explain a CVE / clean scan | **LOCAL SCAN VERIFIED; CI SCREENSHOT PENDING** | both local images have zero HIGH/CRITICAL findings with `--ignore-unfixed`; no Actions output yet |
+| | Explain a CVE / clean scan | **VERIFIED** | both Actions scans passed the configured HIGH/CRITICAL gate; backend report table is in screenshot 27, §3.18 |
 | **M7** (15) | Valid HCL | **VERIFIED** | §3.8 |
 | | `terraform init` | **VERIFIED** | §9, exit 0 |
 | | `terraform validate` | **VERIFIED** | §9, Success |
@@ -771,7 +811,7 @@ These were found by the checks above, not assumed.
 | | Grafana installed and accessible | **VERIFIED** | local Grafana dashboard screenshot 17 |
 | | ≥ 1 live Grafana panel | **VERIFIED** | five populated panels, screenshot 17 |
 | **M10** (5) | README explains the application | **VERIFIED** | `README.md` |
-| | Live demo of a pipeline run and deployment update | **BLOCKED** | requires a GitHub push and a reachable deployment credential; neither was configured here |
+| | Live demo of a pipeline run and deployment update | **PIPELINE VERIFIED; DEPLOYMENT PENDING** | run #4 is green; deployment was skipped because the workflow is `main`-only and no AWS EKS deploy integration is configured |
 
 ---
 
@@ -779,15 +819,14 @@ These were found by the checks above, not assumed.
 
 | Blocker | Reason | Unlocks |
 |---|---|---|
-| **No AWS credentials / AWS CLI** | not configured on this machine | M7 `plan` / `apply` / `destroy`, AWS console screenshot |
-| **Not pushed to GitHub** | no push performed in this session | real Actions run, GHCR packages, CI Trivy output, live pipeline demo |
-| **KUBE_CONFIG_DATA not configured** | optional repo secret | the CI `deploy` job (it exits cleanly, so CI stays green without it) |
+| **AWS account credentials / CLI not configured** | No AWS credentials are connected to this workspace and no resources have been provisioned; the user plans to use a personal account with introductory credits | M7 plan/apply/destroy and AWS evidence |
+| **Workflow deployment is not enabled for this branch** | `deploy` is restricted to `main` and still uses `KUBE_CONFIG_DATA`; run #4 on the capstone branch skipped it | AWS EKS deployment after the workflow is wired to AWS authentication |
 
 The application, tests, Docker, local Kubernetes and observability layers were
-verified in WSL. Genuine terminal captures for pytest, Git history, Compose,
-Kubernetes pods/services, Helm, and `/metrics` are saved as screenshots 19–25.
-GitHub Actions/GHCR and AWS evidence remain incomplete; §8 lists those
-outstanding items. This report does not claim that the whole rubric is complete.
+verified in WSL. Genuine terminal captures are saved as screenshots 19–25;
+GitHub Actions, CI Trivy, and GHCR evidence are saved as screenshots 26–29.
+AWS evidence remains incomplete. This report does not claim that the whole
+rubric is complete.
 
 ---
 
@@ -831,16 +870,22 @@ CampusFix captures.
 | [`23-kubernetes-services-terminal.png`](screenshots/23-kubernetes-services-terminal.png) | Backend, frontend, and PostgreSQL ClusterIP Services and ports |
 | [`24-helm-release-terminal.png`](screenshots/24-helm-release-terminal.png) | Helm release `campusfix`, revision 4, deployed |
 | [`25-metrics-curl-terminal.png`](screenshots/25-metrics-curl-terminal.png) | `curl` response from the Prometheus-format `/metrics` endpoint |
+| [`26-github-actions-success.jpg`](screenshots/26-github-actions-success.jpg) | Actions run #4: test/build and image publish jobs succeeded; deploy job skipped on the capstone branch |
+| [`27-github-actions-trivy-backend.jpg`](screenshots/27-github-actions-trivy-backend.jpg) | Backend Trivy report output from the successful CI scan |
+| [`28-ghcr-packages-list.jpg`](screenshots/28-ghcr-packages-list.jpg) | Public backend and frontend GHCR packages created by run #4 |
+| [`29-ghcr-backend-package-tag.jpg`](screenshots/29-ghcr-backend-package-tag.jpg) | Public backend package and full commit-SHA image tag |
 
 **Completed:** the seven local terminal evidence items requested by the
 instructor are captured above. The three Compose images complement the build
 output with container and health status.
 
-**Still required:** the green GitHub Actions run, the GHCR package/tag page,
-and Trivy output from that Actions run. These require a real push and workflow
-run; no push has been made. AWS plan, VPC/EKS console, and destroy screenshots
-remain pending until AWS setup and an account are available. A local scan or
-browser screenshot cannot substitute for CI or AWS evidence.
+**Completed:** the green Actions run, the CI backend Trivy report, and the GHCR
+package/tag screenshots are captured above. The frontend Trivy step also
+passed in the same run.
+
+**Still required:** AWS plan, VPC/EKS deployment, and destroy screenshots.
+Those remain pending until AWS setup and deployment are completed. A local scan
+or browser screenshot cannot substitute for AWS evidence.
 
 The local terminal captures were taken from the real Ubuntu session on
 2026-10-16; they are not rendered or reconstructed terminal output.
@@ -911,18 +956,20 @@ was fabricated into an image.
 
 The non-AWS application work is in place and locally validated. The terminal
 evidence for pytest, Git history, Compose startup, Kubernetes pods/services,
-Helm, and `/metrics` is complete in §8. Before submission, the remaining
-screenshots are the real GitHub Actions/GHCR/CI Trivy evidence and AWS evidence.
+Helm, and `/metrics` is complete in §8. The real Actions/GHCR/CI Trivy evidence
+is now captured in screenshots 26–29. AWS evidence remains outstanding.
 
-GitHub Actions, GHCR, the CI Trivy output, and the M10 pipeline/deployment demo
-cannot be demonstrated until the current branch is pushed and the workflow has
-run. The deploy stage additionally needs a reachable Kubernetes cluster
-credential. No commit or push was made as part of this local completion.
+GitHub Actions and GHCR have been demonstrated by run #4. For the M10
+deployment update, the workflow still needs an AWS EKS deployment path: the
+current job runs only on `main` and expects `KUBE_CONFIG_DATA`. The capstone
+branch run therefore skipped deployment.
 
-AWS is intentionally excluded from this work. There is no AWS account or
-credential configured, so M7 plan/apply/destroy and AWS console evidence remain
-outstanding. Do not run `terraform apply` without reviewing expected charges
-and confirming the account and budget first.
+AWS is the next work phase. The user's personal AWS account and advertised
+introductory credits have not yet been connected to this workspace, and no
+resources have been provisioned. M7 plan/apply/destroy and AWS console evidence
+remain outstanding. Review the actual account pricing and projected resources
+before applying Terraform; a credit balance does not guarantee every
+EKS-related charge will be covered.
 
 ---
 
@@ -932,13 +979,13 @@ and confirming the account and budget first.
 |---|---|
 | Environment `Ubuntu 22.04` on a hosted devbox | **SUPERSEDED** — current environment is Ubuntu 24.04.5 under WSL 2 |
 | `10/10 passed` tests | **SUPERSEDED** — current suite has 25 passing tests |
-| Zero HIGH/CRITICAL CVEs | **NOW VERIFIED LOCALLY** for both current images; GitHub Actions scan output is still pending |
+| Zero HIGH/CRITICAL findings under configured Trivy gate | **VERIFIED** locally and in Actions run #4; see §3.17–§3.18 |
 | AWS VPC + EKS deployed | **NOT TRUE / NOT DONE** — no AWS account credentials or Terraform apply exist |
 | Kubernetes v1.30/v1.31 cluster | **SUPERSEDED** — local Minikube v1.34.0 was used |
 | Six CampusFix scrape targets and seven dashboard panels | **HISTORICAL** — current run scrapes 2 backend targets and displays five current panels |
 | Local terminal screenshots | **CAPTURED** — screenshots 19–25 in §8 |
-| Actions and GHCR screenshots | **MISSING** — require a push and real workflow run |
-| AWS screenshots | **MISSING** — no AWS account or resources are configured |
+| Actions and GHCR screenshots | **CAPTURED** — screenshots 26–29; run #4 succeeded |
+| AWS screenshots | **MISSING** — account setup and AWS deployment remain pending |
 
 ---
 
@@ -947,6 +994,8 @@ and confirming the account and budget first.
 The editable nine-slide deck is saved in `submission/CampusFix-Capstone-Deck.pptx`.
 Its speaker notes include a short talk track and a suggested order for recording
 the working application, Compose stack, tests, Minikube Ingress, Prometheus,
-and Grafana. It states that the GitHub Actions run and AWS deployment are still
-pending; the slide deck is a guide, not a substitute for the instructor's M10
-live or recorded demo of a pushed change, pipeline run, and deployment update.
+and Grafana. The final slide and speaker notes now report run #4 as green,
+state that deployment was skipped on this branch, and leave AWS deployment as
+the next phase. The slide deck is a guide, not a substitute for the
+instructor's M10 live or recorded demo of a pushed change, pipeline run, and
+deployment update.
