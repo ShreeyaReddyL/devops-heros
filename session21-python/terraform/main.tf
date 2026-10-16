@@ -57,6 +57,8 @@ module "eks" {
 
   endpoint_public_access  = true
   endpoint_private_access = true
+  authentication_mode     = "API_AND_CONFIG_MAP"
+  enable_irsa             = true
 
   # Needed once the node group IAM role is managed explicitly below.
   enable_cluster_creator_admin_permissions = true

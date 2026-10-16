@@ -23,13 +23,14 @@ that was actually run and an observed exit status.
 > **State as of 2026-10-16:** the current validation below supersedes earlier
 > snapshots in this report. CampusFix has been rebuilt and run locally with
 > Docker Compose and Minikube in WSL; real Trivy scans and live Prometheus /
-> Grafana checks were performed. Commit `ba32c7a60b82d2491e867ef2e420a60842caefb9`
-> was pushed to `capstone/campusfix-session21`; GitHub Actions run #4 succeeded,
-> published both SHA-tagged images to public GHCR packages, and passed both
-> configured Trivy gates. The optional deploy job was skipped because this
-> workflow currently deploys only from `main`. AWS infrastructure has not been provisioned.
-> Historical output is identified as such. Local terminal evidence 19–25 and
-> GitHub evidence 26–29 were captured on 2026-10-16; AWS evidence remains.
+> Grafana checks were performed. The latest recorded CI run before the AWS
+> workflow update was run #5 on commit `a04d58b`; it succeeded, published both
+> SHA-tagged images to public GHCR packages, and passed both configured Trivy
+> gates. The report's screenshots 26–29 show the earlier successful run #4.
+> AWS infrastructure has not been provisioned. The working tree now contains
+> GitHub OIDC deployment wiring and an AWS setup guide; those changes still
+> need a pushed Actions run. Local terminal evidence 19–25 and GitHub evidence
+> 26–29 were captured on 2026-10-16; AWS evidence remains.
 
 ---
 
@@ -727,9 +728,10 @@ an upcoming runner-image migration notice, and checkout post-cleanup reported
 `git` exit 128. Neither job nor the workflow failed; review these annotations
 when updating the Actions versions.
 
-The workflow has not deployed this image to Kubernetes or AWS. Its deploy job
-is `main`-only and currently consumes `KUBE_CONFIG_DATA`; AWS OIDC/EKS
-deployment is a separate follow-up step.
+The recorded workflow runs had not deployed this image to Kubernetes or AWS.
+At that time, the deploy job was `main`-only and consumed `KUBE_CONFIG_DATA`.
+The working tree now replaces that path with OIDC-based EKS deployment; the
+updated workflow still needs to be pushed and run.
 
 ## 4. Defects found and fixed
 
@@ -820,7 +822,7 @@ These were found by the checks above, not assumed.
 | Blocker | Reason | Unlocks |
 |---|---|---|
 | **AWS account credentials / CLI not configured** | No AWS credentials are connected to this workspace and no resources have been provisioned; the user plans to use a personal account with introductory credits | M7 plan/apply/destroy and AWS evidence |
-| **Workflow deployment is not enabled for this branch** | `deploy` is restricted to `main` and still uses `KUBE_CONFIG_DATA`; run #4 on the capstone branch skipped it | AWS EKS deployment after the workflow is wired to AWS authentication |
+| **AWS deployment is not enabled yet** | No AWS account or cluster exists, the OIDC role is not configured, and the new workflow edits are not yet pushed | AWS plan/apply, bootstrap, and deployment evidence |
 
 The application, tests, Docker, local Kubernetes and observability layers were
 verified in WSL. Genuine terminal captures are saved as screenshots 19–25;
@@ -959,17 +961,18 @@ evidence for pytest, Git history, Compose startup, Kubernetes pods/services,
 Helm, and `/metrics` is complete in §8. The real Actions/GHCR/CI Trivy evidence
 is now captured in screenshots 26–29. AWS evidence remains outstanding.
 
-GitHub Actions and GHCR have been demonstrated by run #4. For the M10
-deployment update, the workflow still needs an AWS EKS deployment path: the
-current job runs only on `main` and expects `KUBE_CONFIG_DATA`. The capstone
-branch run therefore skipped deployment.
+GitHub Actions and GHCR have been demonstrated by runs #4 and #5. The working
+tree now adds an AWS EKS deployment path using GitHub OIDC and a manual
+workflow trigger. It will remain skipped until the AWS account, EKS cluster,
+bootstrap resources, and `AWS_ROLE_ARN` repository variable are configured.
+The changes still need to be pushed and confirmed by a new green Actions run.
 
-AWS is the next work phase. The user's personal AWS account and advertised
-introductory credits have not yet been connected to this workspace, and no
-resources have been provisioned. M7 plan/apply/destroy and AWS console evidence
-remain outstanding. Review the actual account pricing and projected resources
-before applying Terraform; a credit balance does not guarantee every
-EKS-related charge will be covered.
+AWS remains the next work phase. The user's personal AWS account and
+introductory credits have not yet been created or connected, and no resources
+have been provisioned. M7 plan/apply/destroy and AWS console evidence remain
+outstanding. See [`AWS_SETUP.md`](AWS_SETUP.md) for account-plan tradeoffs,
+regional cost review, and the deployment steps. Do not apply Terraform until
+the plan and cost estimate have been reviewed.
 
 ---
 
@@ -984,7 +987,7 @@ EKS-related charge will be covered.
 | Kubernetes v1.30/v1.31 cluster | **SUPERSEDED** — local Minikube v1.34.0 was used |
 | Six CampusFix scrape targets and seven dashboard panels | **HISTORICAL** — current run scrapes 2 backend targets and displays five current panels |
 | Local terminal screenshots | **CAPTURED** — screenshots 19–25 in §8 |
-| Actions and GHCR screenshots | **CAPTURED** — screenshots 26–29; run #4 succeeded |
+| Actions and GHCR screenshots | **CAPTURED** — screenshots 26–29 show run #4; run #5 is the latest recorded CI run |
 | AWS screenshots | **MISSING** — account setup and AWS deployment remain pending |
 
 ---

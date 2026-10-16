@@ -17,3 +17,7 @@ node_instance_types = ["t3.medium"]
 node_min_size       = 2
 node_max_size       = 4
 node_desired_size   = 2
+
+# Create this IAM role using the least-privilege trust and policy in
+# AWS_SETUP.md. Terraform grants it EKS namespace access when set.
+github_actions_deploy_role_arn = ""

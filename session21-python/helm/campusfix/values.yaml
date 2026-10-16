@@ -51,6 +51,7 @@ postgres:
   password: campusfix
   existingSecret: ""
   storage: 5Gi
+  storageClassName: ""
   resources:
     requests:
       cpu: 100m
@@ -63,6 +64,7 @@ ingress:
   enabled: false
   className: nginx
   host: campusfix.local
+  annotations: {}
 
 hpa:
   enabled: true

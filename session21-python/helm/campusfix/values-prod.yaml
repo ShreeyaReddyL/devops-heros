@@ -17,11 +17,17 @@ postgres:
   #     --from-literal=url='postgresql+psycopg://...'
   existingSecret: campusfix-postgres
   storage: 20Gi
+  storageClassName: gp3
 
 ingress:
   enabled: true
-  className: nginx
-  host: campusfix.local
+  className: alb
+  # Empty host makes the ingress rule reachable through the AWS load balancer
+  # address without requiring a custom DNS record.
+  host: ""
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
 
 hpa:
   enabled: true
@@ -31,4 +37,5 @@ hpa:
 
 monitoring:
   serviceMonitor:
-    enabled: true
+    # The EKS demo stack does not install Prometheus Operator.
+    enabled: false

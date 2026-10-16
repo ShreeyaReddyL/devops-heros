@@ -108,4 +108,7 @@ spec:
   resources:
     requests:
       storage: {{ .Values.postgres.storage | quote }}
+  {{ if .Values.postgres.storageClassName }}
+  storageClassName: {{ .Values.postgres.storageClassName | quote }}
+  {{ end }}
 {{- end }}

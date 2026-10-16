@@ -61,3 +61,9 @@ variable "node_desired_size" {
   type        = number
   default     = 2
 }
+
+variable "github_actions_deploy_role_arn" {
+  description = "Optional IAM role ARN trusted by GitHub OIDC for CampusFix deployments."
+  type        = string
+  default     = ""
+}

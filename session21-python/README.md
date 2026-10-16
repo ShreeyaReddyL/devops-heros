@@ -175,7 +175,8 @@ workflow transitions (409), and statistics.
 
 ## 6. CI/CD
 
-`.github/workflows/ci-cd.yml` runs on pushes to `main` and on pull requests:
+`.github/workflows/ci-cd.yml` runs on pushes to `main` and `capstone/**`, pull
+requests to `main`, and manual `workflow_dispatch` runs:
 
 1. **test** — pytest, then `npm run build`. Failure stops the pipeline.
 2. **build-scan-push** — builds both images, runs **Trivy with
@@ -183,22 +184,20 @@ workflow transitions (409), and statistics.
    commit SHA. The GHCR owner is lowercased because the registry rejects
    uppercase in image paths. Pull requests from forks build and scan but never
    publish.
-3. **deploy** — optional. Requires a `KUBE_CONFIG_DATA` repository secret
-   (base64 kubeconfig). **Without that secret the job logs a notice and exits
-   cleanly instead of failing CI.** Documented in the workflow itself.
+3. **deploy** — optional. When `AWS_ROLE_ARN` is configured as a repository
+   variable, it uses GitHub OIDC for short-lived AWS credentials, then deploys
+   the SHA-tagged images to EKS with the production Helm values. Without that
+   variable, the job is skipped. There is no long-lived AWS key or kubeconfig
+   secret. See [`AWS_SETUP.md`](AWS_SETUP.md) for account setup, cost review,
+   OIDC, bootstrap, deployment, and cleanup.
 
 ---
 
 ## 7. Terraform (AWS)
 
-```bash
-cd terraform
-terraform init
-terraform validate
-terraform plan      # requires AWS credentials
-terraform apply     # creates chargeable resources — see cost note
-terraform destroy   # required after the evaluation
-```
+Follow [`AWS_SETUP.md`](AWS_SETUP.md) before running Terraform. In particular,
+review the AWS Pricing Calculator estimate and the complete Terraform plan
+before `terraform apply`; apply creates chargeable resources.
 
 - Region defaults to `ap-south-1`.
 - 2 public + 2 private subnets across 2 AZs, one NAT gateway.
@@ -206,8 +205,8 @@ terraform destroy   # required after the evaluation
 - Kubernetes version defaults to `1.35`, which is in Amazon EKS **standard**
   support. Versions 1.31–1.33 have moved to extended support, which bills at a
   higher hourly rate.
-- `terraform.tfvars.example` contains no credentials. State, `.terraform/` and
-  lock files are git-ignored.
+- `terraform.tfvars.example` contains no credentials. Terraform state,
+  `.terraform/`, working tfvars and plan files are git-ignored.
 
 > **Cost warning.** `terraform apply` creates an EKS control plane, EC2 worker
 > nodes and a NAT gateway, all of which bill hourly. Always run
