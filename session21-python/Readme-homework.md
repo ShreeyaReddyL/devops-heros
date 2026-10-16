@@ -27,9 +27,10 @@ that was actually run and an observed exit status.
 > workflow update was run #5 on commit `a04d58b`; it succeeded, published both
 > SHA-tagged images to public GHCR packages, and passed both configured Trivy
 > gates. The report's screenshots 26–29 show the earlier successful run #4.
-> AWS infrastructure has not been provisioned. The working tree now contains
-> GitHub OIDC deployment wiring and an AWS setup guide; those changes still
-> need a pushed Actions run. Local terminal evidence 19–25 and GitHub evidence
+> AWS infrastructure has not been provisioned. GitHub OIDC deployment wiring
+> and the AWS setup guide were pushed in commit `09680f5`; its Actions result
+> was not available from this environment when this report was updated. Local
+> terminal evidence 19–25 and GitHub evidence
 > 26–29 were captured on 2026-10-16; AWS evidence remains.
 
 ---
@@ -730,8 +731,8 @@ when updating the Actions versions.
 
 The recorded workflow runs had not deployed this image to Kubernetes or AWS.
 At that time, the deploy job was `main`-only and consumed `KUBE_CONFIG_DATA`.
-The working tree now replaces that path with OIDC-based EKS deployment; the
-updated workflow still needs to be pushed and run.
+Commit `09680f5` replaces that path with OIDC-based EKS deployment. Its Actions
+result has not been confirmed in this report.
 
 ## 4. Defects found and fixed
 
@@ -822,7 +823,7 @@ These were found by the checks above, not assumed.
 | Blocker | Reason | Unlocks |
 |---|---|---|
 | **AWS account credentials / CLI not configured** | No AWS credentials are connected to this workspace and no resources have been provisioned; the user plans to use a personal account with introductory credits | M7 plan/apply/destroy and AWS evidence |
-| **AWS deployment is not enabled yet** | No AWS account or cluster exists, the OIDC role is not configured, and the new workflow edits are not yet pushed | AWS plan/apply, bootstrap, and deployment evidence |
+| **AWS deployment is not enabled yet** | No AWS account or cluster exists, and the OIDC role and GitHub repository variable are not configured | AWS plan/apply, bootstrap, and deployment evidence |
 
 The application, tests, Docker, local Kubernetes and observability layers were
 verified in WSL. Genuine terminal captures are saved as screenshots 19–25;
@@ -961,11 +962,11 @@ evidence for pytest, Git history, Compose startup, Kubernetes pods/services,
 Helm, and `/metrics` is complete in §8. The real Actions/GHCR/CI Trivy evidence
 is now captured in screenshots 26–29. AWS evidence remains outstanding.
 
-GitHub Actions and GHCR have been demonstrated by runs #4 and #5. The working
-tree now adds an AWS EKS deployment path using GitHub OIDC and a manual
-workflow trigger. It will remain skipped until the AWS account, EKS cluster,
-bootstrap resources, and `AWS_ROLE_ARN` repository variable are configured.
-The changes still need to be pushed and confirmed by a new green Actions run.
+GitHub Actions and GHCR have been demonstrated by runs #4 and #5. Commit
+`09680f5` adds an AWS EKS deployment path using GitHub OIDC and a manual
+workflow trigger. The GitHub Actions run for that push was not confirmed here.
+Deployment remains unavailable until the AWS account, EKS cluster, bootstrap
+resources, and `AWS_ROLE_ARN` repository variable are configured.
 
 AWS remains the next work phase. The user's personal AWS account and
 introductory credits have not yet been created or connected, and no resources
