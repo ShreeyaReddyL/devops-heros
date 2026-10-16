@@ -1,0 +1,78 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: campusfix-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  campusfix-dashboard.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 0,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": { "defaults": { "unit": "req" }, "overrides": [] },
+          "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+          "id": 1,
+          "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto" },
+          "targets": [{ "expr": "sum(increase(http_requests_total{job=\"campusfix-backend\"}[15m]))", "legendFormat": "requests", "refId": "A" }],
+          "title": "API requests (15 min)",
+          "type": "stat"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+          "id": 2,
+          "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+          "targets": [{ "expr": "sum by (handler) (rate(http_requests_total{job=\"campusfix-backend\",handler!~\"none|/metrics\"}[5m]))", "legendFormat": "{{handler}}", "refId": "A" }],
+          "title": "HTTP request rate by route",
+          "type": "timeseries"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+          "id": 3,
+          "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+          "targets": [{ "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{job=\"campusfix-backend\"}[5m])))", "legendFormat": "p95", "refId": "A" }],
+          "title": "p95 request latency",
+          "type": "timeseries"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
+          "id": 4,
+          "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+          "targets": [{ "expr": "sum by (status) (rate(http_requests_total{job=\"campusfix-backend\"}[5m]))", "legendFormat": "{{status}}", "refId": "A" }],
+          "title": "HTTP responses by status",
+          "type": "timeseries"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+          "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
+          "id": 5,
+          "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto" },
+          "targets": [{ "expr": "sum(kube_pod_status_ready{namespace=\"campusfix\",condition=\"true\",pod=~\"campusfix-(backend|frontend)-.*\"})", "legendFormat": "ready pods", "refId": "A" }],
+          "title": "Ready CampusFix app pods",
+          "type": "stat"
+        }
+      ],
+      "refresh": "15s",
+      "schemaVersion": 39,
+      "tags": ["campusfix", "observability"],
+      "time": { "from": "now-30m", "to": "now" },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "CampusFix API observability",
+      "uid": "campusfix-observability",
+      "version": 1
+    }

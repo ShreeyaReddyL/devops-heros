@@ -233,7 +233,7 @@ helm upgrade --install campusfix ./helm/campusfix \
   -n campusfix --create-namespace \
   --set backend.image=campusfix-backend  --set backend.tag=local  --set backend.imagePullPolicy=IfNotPresent \
   --set frontend.image=campusfix-frontend --set frontend.tag=local --set frontend.imagePullPolicy=IfNotPresent \
-  --set ingress.enabled=true --set ingress.className=nginx --set ingress.host=campusfix.local \
+  --set ingress.enabled=true --set ingress.className=nginx --set ingress.host=localhost \
   --wait
 ```
 
@@ -274,9 +274,9 @@ chart.
 ```bash
 kubectl get pods -n campusfix
 kubectl get svc,endpoints -n campusfix
-kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 8080:80
-curl -H "Host: campusfix.local" http://localhost:8080/
-curl -H "Host: campusfix.local" http://localhost:8080/api/tickets
+kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 8081:80
+curl http://localhost:8081/
+curl http://localhost:8081/api/tickets
 ```
 
 ---
@@ -291,24 +291,30 @@ helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
   -f monitoring/prometheus-values.yaml
 ```
 
-The ServiceMonitor carries `release: kube-prometheus-stack`; keep that in sync
-with `monitoring.release` in the chart values.
+The ServiceMonitor carries `release: monitoring`; keep that in sync with
+`monitoring.release` in `helm/campusfix/values.yaml`.
+
+Apply the CampusFix dashboard ConfigMap after installing the stack. The Grafana
+dashboard sidecar discovers ConfigMaps labeled `grafana_dashboard=1`:
 
 ```bash
-# Prometheus targets: CampusFix should show "6 / 6 up"
-kubectl port-forward -n monitoring svc/monitoring-kube-prometheus-prometheus 9090:9090
-# open http://localhost:9090/targets?search=campusfix
-
-# Grafana
-kubectl port-forward -n monitoring svc/monitoring-grafana 3000:80
-# open http://localhost:3000  (admin / <from the admin-secret>)
+kubectl apply -f monitoring/campusfix-dashboard-configmap.yaml
 ```
 
-The `CampusFix API` dashboard has 7 panels driven by the metric names the
-instrumentator actually exposes (`http_requests_total`,
-`http_request_duration_seconds_bucket`). It shows total requests, request rate,
-p95 latency, scraped pod count, requests/second by handler, p95 latency by
-handler and responses by status code.
+```bash
+# Prometheus targets: both current CampusFix backend replicas should show UP
+kubectl port-forward -n monitoring svc/monitoring-kube-prometheus-prometheus 9090:9090
+# open http://localhost:9090/targets?search=campusfix (current local run: 2/2 UP)
+
+# Grafana
+kubectl port-forward -n monitoring svc/monitoring-grafana 3001:80
+# open http://localhost:3001 (admin / password from the admin Secret)
+```
+
+The `CampusFix API observability` dashboard has five live panels: API requests
+over 15 minutes, ready CampusFix app pods, request rate by route, p95 latency,
+and HTTP responses by status. It uses `http_requests_total`,
+`http_request_duration_seconds_bucket`, and kube-state-metrics.
 
 > If you are port-forwarding Grafana, do **not** pipe `kubectl port-forward`
 > output through `grep`/`tee`. A forwarded port writes continuously; piping it

@@ -12,7 +12,7 @@ COPY . .
 RUN npm run build
 
 # ---- Stage 2: serve the static bundle with unprivileged Nginx ---------------
-FROM nginx:1.27-alpine
+FROM nginx:1.30.6-alpine3.24
 
 # The stock image starts as root and writes its pid file to /var/run. Running as
 # the unprivileged `nginx` user (uid 101) requires the pid file and every scratch

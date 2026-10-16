@@ -20,11 +20,13 @@ that was actually run and an observed exit status.
 | **NOT TESTED** | Deliberately not attempted, with the reason stated. |
 | **UNVERIFIED** | A pre-existing claim in the repository that I could not reproduce and have **not** repeated as fact. |
 
-> **Important:** the previous version of this report described a Linux
-> "devbox" with "10/10 passed" tests, "0 High/Critical CVEs", a live AWS
-> deployment and working Grafana panels. Those claims were inherited from the
-> starter repository. They were **not reproducible** on this machine and are
-> listed in §11 as UNVERIFIED rather than restated as accomplishments.
+> **State as of 2026-10-16:** the current validation below supersedes earlier
+> snapshots in this report. CampusFix has been rebuilt and run locally with
+> Docker Compose and Minikube in WSL; real Trivy scans and live Prometheus /
+> Grafana checks were performed. AWS was not provisioned, and no Git push or
+> GitHub Actions run was performed. Historical output is identified as such;
+> Current local terminal evidence 19–25 was captured on 2026-10-16; only
+> GitHub and AWS screenshots remain outstanding in §8.
 
 ---
 
@@ -110,8 +112,7 @@ All validation for this session ran on a **real Linux environment**.
 | Git | 2.50.1.windows.1 | pre-installed on Windows |
 | Python | 3.12.10 | installed per-user from python.org (no admin) |
 | Node.js | v22.17.0 | pre-installed on Windows + installed in Ubuntu |
-| Docker (Compose) | 29.8.2 | Docker Desktop |
-| **Docker Engine (CE)** | **29.9.0** | **installed inside Ubuntu** — the engine minikube uses |
+| **Docker Engine (CE)** | **29.9.0** | **installed inside Ubuntu** — used for Compose builds and Minikube |
 | kubectl | v1.37.1 | `~/.local/bin` in Ubuntu |
 | **minikube** | **v1.39.0** | Kubernetes **v1.34.0**, docker driver |
 | helm | v3.16.3 | `~/.local/bin` in Ubuntu |
@@ -133,12 +134,14 @@ The course is taught on Linux and the starter report described an Ubuntu
 "devbox". That environment now genuinely exists: Ubuntu 24.04 runs **inside
 WSL 2**, hosts its own Docker Engine, and runs the whole Kubernetes stack.
 
-Two Docker installations exist and they are not interchangeable:
+The validated workflow uses Docker Engine inside Ubuntu WSL. Windows-side
+Docker Desktop's named pipe was unavailable in this session, so Compose,
+Minikube, Helm, and Trivy commands ran in the Linux shell:
 
 | Runtime | Used for |
 |---|---|
-| Docker Desktop (29.8.2, Windows) | `docker compose up` validation and browser evidence |
-| Docker CE 29.9.0 **inside Ubuntu** | building the images and running minikube |
+| Docker CE 29.9.0 **inside Ubuntu** | `docker compose up --build`, image builds, Minikube and local Trivy scans |
+| Windows Docker Desktop | Not used; its Docker pipe was unavailable |
 
 The images deployed to Kubernetes were **built natively on Ubuntu Linux**
 (`campusfix-backend:local`, `campusfix-frontend:local`) and loaded into the
@@ -205,6 +208,11 @@ create / list / filter / read / update / delete, `/api/tickets/stats`, plus
 SQLite file *above* the `app.*` imports (the SQLAlchemy engine is constructed
 at import time), truncates `tickets` before every test via an autouse fixture,
 and deletes the file when the session ends. PostgreSQL is never touched.
+
+**Current Linux-container recheck (2026-10-16):** the same 25 tests passed in
+the rebuilt backend image under WSL Docker Engine. Two third-party deprecation
+warnings were printed; there were no test failures. The genuine terminal
+capture is saved as [`19-pytest-terminal.png`](screenshots/19-pytest-terminal.png).
 
 ### 3.4 Migrations — **VERIFIED**
 
@@ -409,20 +417,20 @@ http_requests_total{handler="none",method="GET",status="4xx"}           1.0
 
 ---
 
-## 3.12 Docker Compose on Linux containers — **VERIFIED**
+## 3.12 Docker Compose on Linux containers — **VERIFIED (current WSL run)**
 
 ```bash
-# PowerShell (Windows, Docker Desktop)
-docker compose config      # exit 0
-docker compose build       # exit 0 - both images built
-docker compose up -d       # exit 0
+# Ubuntu 24.04 inside WSL 2
+docker compose config
+docker compose up --build -d
+docker compose ps
 ```
 
 ```text
 SERVICE    STATUS                    PORTS
-backend    Up 3 minutes (healthy)   0.0.0.0:8000->8000/tcp
-frontend   Up 2 minutes (healthy)   0.0.0.0:3000->8080/tcp
-postgres   Up 3 minutes (healthy)   0.0.0.0:5432->5432/tcp
+backend    Up (healthy)             0.0.0.0:8000->8000/tcp
+frontend   Up (healthy)             0.0.0.0:3000->8080/tcp
+postgres   Up (healthy)             0.0.0.0:5432->5432/tcp
 ```
 
 The `condition: service_healthy` chain worked exactly as designed —
@@ -453,11 +461,23 @@ tables `tickets` + `alembic_version`, `tickets_pkey`, `tickets_id_seq`, and
 | `GET` after delete | **404** |
 | `GET /metrics` | 200, ~13 KB |
 
-Screenshots: [`11-docker-compose-ui.png`](screenshots/11-docker-compose-ui.png)
+Current Compose browser evidence: [`14-campusfix-compose-app.png`](screenshots/14-campusfix-compose-app.png).
+The older [`11-docker-compose-ui.png`](screenshots/11-docker-compose-ui.png)
+is retained as historical evidence. Current terminal evidence of
+`docker compose up --build` and all three healthy services is saved in
+[`21-compose-build-terminal.png`](screenshots/21-compose-build-terminal.png),
+[`21-compose-services-running.png`](screenshots/21-compose-services-running.png),
+and [`21-compose-health-status.png`](screenshots/21-compose-health-status.png).
 
 ---
 
 ## 3.13 Kubernetes cluster + Helm deploy — **VERIFIED**
+
+> **Current-state note (2026-10-16):** the historical command/output below
+> records an earlier `campusfix.local` run and HPA scale test. The current
+> deployment is Helm release `campusfix` revision 4 with two backend replicas,
+> two frontend replicas and one PostgreSQL pod; the Ingress host is `localhost`.
+> Current browser evidence is [`15-campusfix-kubernetes-ingress.png`](screenshots/15-campusfix-kubernetes-ingress.png).
 
 All commands below ran inside **Ubuntu** as `shreeya@DESKTOP-G7A7T8M`.
 
@@ -559,64 +579,28 @@ not a fault.
 
 ---
 
-## 3.15 Prometheus and Grafana — **VERIFIED**
+## 3.15 Prometheus and Grafana — **VERIFIED (current local deployment)**
 
-```bash
-helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
-  -n monitoring --create-namespace -f monitoring/prometheus-values.yaml
-# exit 0 — kube-prometheus-stack 92.4.0, Prometheus v0.94.1
+The `monitoring` Helm release is installed in Minikube. CampusFix's
+ServiceMonitor uses the matching `release: monitoring` label and Prometheus
+discovers the two active backend replicas. Both targets were observed `UP`
+(`2 / 2`) on the current Prometheus Targets page.
 
-monitoring-grafana-7c69dbc6df-l7fb8                   3/3  Running
-monitoring-kube-prometheus-operator-65b556fb8-rzxjx   1/1  Running
-monitoring-kube-state-metrics-7b5bd68446-nvnss        1/1  Running
-monitoring-prometheus-node-exporter-9gdmw             1/1  Running
-prometheus-monitoring-kube-prometheus-prometheus-0    2/2  Running
-```
+The current provisioned Grafana dashboard, `CampusFix API observability`, has
+five populated panels: API requests over 15 minutes, ready CampusFix app pods,
+request rate by route, p95 request latency, and responses by status. Its JSON
+is in `monitoring/campusfix-dashboard.json`, and
+`monitoring/campusfix-dashboard-configmap.yaml` provisions it through the
+Grafana dashboard sidecar.
 
-**Scrape targets — every CampusFix target UP:**
+Current screenshots:
 
-```text
-job=campusfix-backend  instance=10.244.0.6:8000    health=up
-job=campusfix-backend  instance=10.244.0.9:8000    health=up
-job=campusfix-backend  instance=10.244.0.24:8000   health=up
-job=campusfix-backend  instance=10.244.0.25:8000   health=up
-job=campusfix-backend  instance=10.244.0.26:8000   health=up
-job=campusfix-backend  instance=10.244.0.27:8000   health=up
-```
+- [`16-campusfix-prometheus-targets.png`](screenshots/16-campusfix-prometheus-targets.png) — both backend scrape targets UP.
+- [`17-campusfix-grafana-dashboard.png`](screenshots/17-campusfix-grafana-dashboard.png) — five live panels populated with app metrics.
+- [`18-campusfix-metrics-endpoint.png`](screenshots/18-campusfix-metrics-endpoint.png) — Prometheus-formatted metrics from `/metrics`.
 
-**Real recorded samples — `sum(http_requests_total) = 58435`:**
-
-```text
-/api/tickets/stats   GET   2xx    32307
-/api/tickets         GET   2xx    25346
-/ready               GET   2xx      397
-/health              GET   2xx      260
-/metrics             GET   2xx      123
-/api/tickets         POST  2xx        1
-/api/tickets/{id}    DELETE 2xx       1
-```
-
-**Grafana dashboard `CampusFix API` (7 panels), all populated:**
-
-```text
-Total HTTP requests      144 K
-Request rate             123 req/s
-p95 latency              95.0 ms
-CampusFix pods scraped   6
-by handler  /api/tickets · /api/tickets/stats · /api/tickets/{ticket_id}
-             /health · /metrics · /ready
-by status   2xx
-```
-
-Screenshots: [`12-grafana-dashboard.png`](screenshots/12-grafana-dashboard.png),
-[`13-prometheus-targets-up.png`](screenshots/13-prometheus-targets-up.png)
-(Prometheus Targets page: `serviceMonitor/campusfix/campusfix-backend/0 — 6 / 6 up`).
-
-> **Honest caveat.** Three of kube-prometheus-stack's own self-monitoring
-> targets (`kube-controller-manager`, `kube-etcd`, `kube-scheduler`) report
-> `down` on minikube because the control-plane components are not exposed there.
-> This is unrelated to CampusFix and is not a rubric criterion. All six
-> **CampusFix** targets are up.
+Screenshots 12 and 13 show a legitimate earlier Grafana/Prometheus state, but
+their counts and panels are stale; use 16–18 for submission.
 
 ---
 
@@ -684,13 +668,28 @@ are `Running`. A Service selects pods by label; no matching label = no endpoints
 ### Final state — not left broken
 
 ```text
-campusfix-backend    6/6   6   6     (HPA)
+campusfix-backend    2/2   2   2     (current local deployment)
 campusfix-frontend   2/2   2   2
 campusfix-postgres   1/1   1   1
 campusfix            campusfix  4  deployed
 ```
 
 ---
+
+## 3.17 Local image security scans — **VERIFIED**
+
+Trivy 0.76.0 scanned the rebuilt local backend and frontend images for HIGH and
+CRITICAL findings, ignoring vulnerabilities without a fix available. Both
+scans returned zero findings:
+
+```bash
+trivy image --ignore-unfixed --severity HIGH,CRITICAL session21-python-backend:latest
+trivy image --ignore-unfixed --severity HIGH,CRITICAL session21-python-frontend:latest
+```
+
+This is local scan evidence only. The rubric asks for the Trivy output from a
+GitHub Actions run as well; that screenshot and run URL are pending because no
+push was made.
 
 ## 4. Defects found and fixed
 
@@ -719,6 +718,7 @@ These were found by the checks above, not assumed.
 | 19 | Frontend image | `/etc/nginx/conf.d` was root-owned, so the entrypoint's envsubst step could not render `default.conf`; nginx started with **no server block** and closed every connection. `nginx -t` still passed, so the healthcheck missed it | chown `conf.d`/`templates` to `nginx`; healthcheck now fetches `/healthz` instead of only validating syntax |
 | 20 | Frontend image | `USER nginx` is a **name**; the kubelet cannot verify a username is non-root and refused to start every frontend pod (`CreateContainerConfigError`) | changed to `USER 101` (the nginx uid) so `runAsNonRoot: true` is satisfied |
 | 21 | Migration 0002 | PostgreSQL does not follow a table rename, so `tasks_id_seq` and `tasks_pkey` survived — the schema still looked like the TaskBoard start | rename both in `upgrade()` and reverse in `downgrade()` |
+| 22 | CI deploy | rollout verification referenced `campusfix-campusfix-backend`, but the Helm fullname helper renders `campusfix-backend` for this release | corrected the rollout check to use the rendered Deployment name; workflow has not yet run on GitHub |
 
 ---
 
@@ -736,7 +736,7 @@ These were found by the checks above, not assumed.
 | | Test DB, not production | **VERIFIED** | §3.3 isolation |
 | | `pytest.ini` / `conftest.py` correct | **VERIFIED** | both present |
 | **M3** (5) | Public repo linked | **VERIFIED** | header |
-| | Meaningful commit messages | **VERIFIED** | 6 milestone commits |
+| | At least 10 meaningful commits | **VERIFIED** | 64 commits in local history; current head is `cc7ec87` |
 | | `.gitignore` covers `.env`, `__pycache__`, `node_modules`, `.venv` | **VERIFIED** | §3.10 |
 | **M4** (10) | `backend/Dockerfile` builds | **VERIFIED** | §3.12 exit 0 |
 | | `frontend/Dockerfile` multi-stage | **VERIFIED** | Node build → Nginx runtime |
@@ -746,11 +746,11 @@ These were found by the checks above, not assumed.
 | | pytest job fails the build | **VERIFIED** (config) | `needs: test` |
 | | Frontend built in pipeline | **VERIFIED** (config) | `npm run build` |
 | | Both images built | **VERIFIED** (config) | build-push-action ×2 |
-| | Pushed to GHCR | **NOT TESTED** | needs push to the repo |
+| | Pushed to GHCR | **NOT VERIFIED** | no GitHub push or workflow run was made |
 | | SHA image tags | **VERIFIED** (config) | `:${github.sha}` |
 | **M6** (5) | Trivy scans both images | **VERIFIED** (config) | 2 scan steps |
 | | Fails on HIGH/CRITICAL | **VERIFIED** (config) | `exit-code: "1"` |
-| | Explain a CVE / clean scan | **NOT TESTED** | needs a real pipeline run |
+| | Explain a CVE / clean scan | **LOCAL SCAN VERIFIED; CI SCREENSHOT PENDING** | both local images have zero HIGH/CRITICAL findings with `--ignore-unfixed`; no Actions output yet |
 | **M7** (15) | Valid HCL | **VERIFIED** | §3.8 |
 | | `terraform init` | **VERIFIED** | §9, exit 0 |
 | | `terraform validate` | **VERIFIED** | §9, Success |
@@ -762,16 +762,16 @@ These were found by the checks above, not assumed.
 | **M8** (15) | `k8s/namespace.yaml` applies | **VERIFIED** | §3.13 |
 | | Chart with Chart.yaml/values/templates | **VERIFIED** | `helm lint` exit 0 |
 | | `helm upgrade --install` deploys | **VERIFIED** | §3.13, revision 4 deployed |
-| | ≥ 2 replicas each | **VERIFIED** | backend 2→6, frontend 2 |
+| | ≥ 2 replicas each | **VERIFIED** | current deployment: backend 2, frontend 2 |
 | | ClusterIP Services | **VERIFIED** | 8000 / 8080 / 5432 |
 | | Ingress `/`→frontend, `/api`→backend | **VERIFIED** | §3.13 routing table |
-| | Pods Running | **VERIFIED** | 9/9 Running, 0 restarts |
-| **M9** (10) | `/metrics` Prometheus format | **VERIFIED** | 58 435 samples recorded |
-| | Prometheus installed and scraping | **VERIFIED** | 6/6 targets up |
-| | Grafana installed and accessible | **VERIFIED** | Grafana 13.2.4, 3/3 |
-| | ≥ 1 live Grafana panel | **VERIFIED** | 7 populated panels, screenshot 12 |
+| | Pods Running | **VERIFIED** | current CampusFix namespace: 5/5 app/database pods Running |
+| **M9** (10) | `/metrics` Prometheus format | **VERIFIED** | browser screenshot 18 and genuine terminal `curl` screenshot 25 |
+| | Prometheus installed and scraping | **VERIFIED** | both current backend targets UP, screenshot 16 |
+| | Grafana installed and accessible | **VERIFIED** | local Grafana dashboard screenshot 17 |
+| | ≥ 1 live Grafana panel | **VERIFIED** | five populated panels, screenshot 17 |
 | **M10** (5) | README explains the application | **VERIFIED** | `README.md` |
-| | Live demo of a pipeline run | **NOT TESTED** | requires push |
+| | Live demo of a pipeline run and deployment update | **BLOCKED** | requires a GitHub push and a reachable deployment credential; neither was configured here |
 
 ---
 
@@ -780,11 +780,14 @@ These were found by the checks above, not assumed.
 | Blocker | Reason | Unlocks |
 |---|---|---|
 | **No AWS credentials / AWS CLI** | not configured on this machine | M7 `plan` / `apply` / `destroy`, AWS console screenshot |
-| **Not pushed to GitHub** | no push performed in this session | real Actions run, GHCR packages, Trivy findings, live demo |
+| **Not pushed to GitHub** | no push performed in this session | real Actions run, GHCR packages, CI Trivy output, live pipeline demo |
 | **KUBE_CONFIG_DATA not configured** | optional repo secret | the CI `deploy` job (it exits cleanly, so CI stays green without it) |
 
-Everything else in the rubric that does not require AWS credentials or a
-GitHub push has been executed and verified on a real Linux environment.
+The application, tests, Docker, local Kubernetes and observability layers were
+verified in WSL. Genuine terminal captures for pytest, Git history, Compose,
+Kubernetes pods/services, Helm, and `/metrics` are saved as screenshots 19–25.
+GitHub Actions/GHCR and AWS evidence remain incomplete; §8 lists those
+outstanding items. This report does not claim that the whole rubric is complete.
 
 ---
 
@@ -800,23 +803,47 @@ GitHub push has been executed and verified on a real Linux environment.
 
 ## 8. Screenshots
 
-Existing files in `screenshots/` (`01-`…`08-`) are earlier coursework and are
-preserved untouched. Several depict a Linux devbox and results that could not be
-reproduced here; they are **not** used as evidence for any claim in §5.
-
-Two new screenshots were captured from the **actually running** application
-during this session (see §9a):
+The earlier `01-`…`08-` images were from TaskBoard/coursework, not CampusFix,
+so they were removed from this capstone evidence folder on 2026-10-16. Images
+in the individual earlier-session folders were left untouched. The current
+screenshots below were captured from the actual application, observability
+stack, and Ubuntu terminal. Use 14–25 for current evidence; 09–13 are earlier
+CampusFix captures.
 
 | File | What it proves |
 |---|---|
 | [`09-campusfix-browser-ui.png`](screenshots/09-campusfix-browser-ui.png) | Dashboard rendering live API data |
 | [`10-campusfix-ticket-created.png`](screenshots/10-campusfix-ticket-created.png) | Ticket created through the UI form (round trip) |
-| [`11-docker-compose-ui.png`](screenshots/11-docker-compose-ui.png) | **Docker Compose stack** serving live PostgreSQL data on :3000 |
-| [`12-grafana-dashboard.png`](screenshots/12-grafana-dashboard.png) | **Grafana dashboard with 7 populated panels** |
-| [`13-prometheus-targets-up.png`](screenshots/13-prometheus-targets-up.png) | **Prometheus Targets page: CampusFix 6/6 up** |
+| [`11-docker-compose-ui.png`](screenshots/11-docker-compose-ui.png) | Earlier Compose browser capture |
+| [`12-grafana-dashboard.png`](screenshots/12-grafana-dashboard.png) | Earlier dashboard capture; superseded by 17 |
+| [`13-prometheus-targets-up.png`](screenshots/13-prometheus-targets-up.png) | Earlier targets capture; superseded by 16 |
+| [`14-campusfix-compose-app.png`](screenshots/14-campusfix-compose-app.png) | Current browser app served by the healthy Compose stack |
+| [`15-campusfix-kubernetes-ingress.png`](screenshots/15-campusfix-kubernetes-ingress.png) | Current app served through Minikube Ingress |
+| [`16-campusfix-prometheus-targets.png`](screenshots/16-campusfix-prometheus-targets.png) | Prometheus showing 2/2 CampusFix targets UP |
+| [`17-campusfix-grafana-dashboard.png`](screenshots/17-campusfix-grafana-dashboard.png) | Current Grafana dashboard with five populated panels |
+| [`18-campusfix-metrics-endpoint.png`](screenshots/18-campusfix-metrics-endpoint.png) | Prometheus metrics returned by `/metrics` |
+| [`19-pytest-terminal.png`](screenshots/19-pytest-terminal.png) | Ubuntu Docker run: 25 pytest tests passed; two third-party deprecation warnings |
+| [`20-git-history-terminal.png`](screenshots/20-git-history-terminal.png) | Recent Git history and current capstone branch |
+| [`21-compose-build-terminal.png`](screenshots/21-compose-build-terminal.png) | `docker compose up --build` build output |
+| [`21-compose-services-running.png`](screenshots/21-compose-services-running.png) | Compose images built and all three containers running |
+| [`21-compose-health-status.png`](screenshots/21-compose-health-status.png) | `docker compose ps`: backend, frontend, and PostgreSQL healthy |
+| [`22-kubernetes-pods-terminal.png`](screenshots/22-kubernetes-pods-terminal.png) | Five CampusFix pods are `1/1 Running` |
+| [`23-kubernetes-services-terminal.png`](screenshots/23-kubernetes-services-terminal.png) | Backend, frontend, and PostgreSQL ClusterIP Services and ports |
+| [`24-helm-release-terminal.png`](screenshots/24-helm-release-terminal.png) | Helm release `campusfix`, revision 4, deployed |
+| [`25-metrics-curl-terminal.png`](screenshots/25-metrics-curl-terminal.png) | `curl` response from the Prometheus-format `/metrics` endpoint |
 
-No screenshot exists for AWS, GitHub Actions, GHCR or Trivy, because none of
-those ran here. Nothing has been fabricated.
+**Completed:** the seven local terminal evidence items requested by the
+instructor are captured above. The three Compose images complement the build
+output with container and health status.
+
+**Still required:** the green GitHub Actions run, the GHCR package/tag page,
+and Trivy output from that Actions run. These require a real push and workflow
+run; no push has been made. AWS plan, VPC/EKS console, and destroy screenshots
+remain pending until AWS setup and an account are available. A local scan or
+browser screenshot cannot substitute for CI or AWS evidence.
+
+The local terminal captures were taken from the real Ubuntu session on
+2026-10-16; they are not rendered or reconstructed terminal output.
 
 ---
 
@@ -859,119 +886,67 @@ configured on this machine, and `apply` creates billable resources (§10.3).
 
 ---
 
-## 9a. Browser evidence — **VERIFIED**
+## 9a. Current browser evidence — **VERIFIED**
 
-Docker was unavailable, but the **production build** was verified end-to-end in
-a real browser without it:
+The current Compose browser capture at
+[`screenshots/14-campusfix-compose-app.png`](screenshots/14-campusfix-compose-app.png)
+shows the React frontend served by the Compose Nginx container on port 3000,
+calling FastAPI and PostgreSQL. The current Kubernetes capture at
+[`screenshots/15-campusfix-kubernetes-ingress.png`](screenshots/15-campusfix-kubernetes-ingress.png)
+shows the same application through the Minikube Nginx Ingress via a localhost
+port-forward. These are separate local database instances.
 
-1. `npm run build` produced `dist/`.
-2. `frontend/serve-dist.mjs` served `dist/` on `127.0.0.1:3000` and proxied
-   `/api` to the FastAPI backend on `:8000` — the same split Nginx performs in
-   the container.
-3. Six realistic tickets were created and three were moved through the workflow
-   (`POST` + `PUT`).
-4. The CampusFix dashboard was opened at <http://127.0.0.1:3000>.
+Screenshots 09 and 10 are older CampusFix UI captures from the earlier local
+SQLite run. They are genuine but do not prove the current PostgreSQL-backed
+Compose or Kubernetes deployments; use 14 and 15 for those claims.
 
-Observed in the rendered DOM:
-
-```text
-document.title = "CampusFix — Campus Maintenance & IT Support"
-brand           = "CampusFix"
-stats           = Total 6, Open 3, In progress 2, Resolved 1, Critical 1
-categories      = Campus Wi-Fi 2, Projector/AV 1, Plumbing 1,
-                  Lab Equipment 1, Electrical & Lighting 1
-```
-
-5. The **"Report issue"** form was filled in and submitted through the UI:
-
-```text
-notice        = "✓ Ticket #7 submitted."
-form closed   = true
-total tickets = 7   (was 6)
-critical      = 2   (was 1)
-first row     = "#7 Wi-Fi dead zone in the Central Library reading room"
-```
-
-That is a genuine full round trip — React form → `POST /api/tickets` → FastAPI →
-SQLAlchemy → database → refetch → re-render.
-
-Screenshots captured from the running application:
-
-| File | Content |
-|---|---|
-| [`screenshots/09-campusfix-browser-ui.png`](screenshots/09-campusfix-browser-ui.png) | Dashboard with 6 live tickets, stats and category breakdown |
-| [`screenshots/10-campusfix-ticket-created.png`](screenshots/10-campusfix-ticket-created.png) | After creating ticket #7 through the UI form |
-
-> These were produced against a local SQLite database, not PostgreSQL, because
-> Docker was not available. They prove the **application layer** (M1). They are
-> not evidence of the Docker Compose stack (M4).
+Screenshots 19–25 now provide the separate real-terminal evidence for Compose,
+pytest, Kubernetes pods/services, Helm, Git history, and `/metrics`. The
+terminal images are original captures from the live Ubuntu session; no output
+was fabricated into an image.
 
 ---
 
-## 10. Exact next steps
+## 10. Remaining submission work
 
-### 10.1 Install Docker Desktop (needs administrator)
+The non-AWS application work is in place and locally validated. The terminal
+evidence for pytest, Git history, Compose startup, Kubernetes pods/services,
+Helm, and `/metrics` is complete in §8. Before submission, the remaining
+screenshots are the real GitHub Actions/GHCR/CI Trivy evidence and AWS evidence.
 
-```powershell
-# PowerShell, elevated
-wsl --install
-# reboot, then:
-winget install -e --id Docker.DockerDesktop
-```
+GitHub Actions, GHCR, the CI Trivy output, and the M10 pipeline/deployment demo
+cannot be demonstrated until the current branch is pushed and the workflow has
+run. The deploy stage additionally needs a reachable Kubernetes cluster
+credential. No commit or push was made as part of this local completion.
 
-After install, verify (PowerShell):
-
-```powershell
-docker version
-docker compose version
-```
-
-Then run the stack:
-
-```powershell
-cd C:\Users\Dell\OneDrive\Desktop\devops\session21-python
-docker compose up --build
-docker compose ps
-curl.exe http://localhost:8000/health
-curl.exe http://localhost:3000
-```
-
-### 10.2 Push and watch a real pipeline
-
-```powershell
-cd C:\Users\Dell\OneDrive\Desktop\devops
-git push -u origin capstone/campusfix-session21
-```
-
-Then open the Actions tab, confirm the green run, and record the Trivy output
-and the GHCR package pages as real evidence.
-
-### 10.3 Terraform (needs AWS credentials + cost approval)
-
-```powershell
-$env:PATH="$env:LOCALAPPDATA\DevOpsTools;$env:PATH"
-cd C:\Users\Dell\OneDrive\Desktop\devops\session21-python\terraform
-aws sts get-caller-identity
-terraform plan
-```
-
-**Do not run `terraform apply` without explicit cost approval.** An EKS control
-plane, two `t3.medium` nodes and a NAT gateway all bill hourly. Always finish
-with `terraform destroy`.
+AWS is intentionally excluded from this work. There is no AWS account or
+credential configured, so M7 plan/apply/destroy and AWS console evidence remain
+outstanding. Do not run `terraform apply` without reviewing expected charges
+and confirming the account and budget first.
 
 ---
 
-## 11. Claims from the previous report that could not be verified
-
-These appear in the earlier version of this file and are **not** restated as
-achievements:
+## 11. Earlier claims and screenshots that are superseded
 
 | Previous claim | Status |
 |---|---|
-| Environment "Ubuntu 22.04 LTS (`shreeya@devbox`)" | **SUPERSEDED** — a real Ubuntu 24.04.5 environment now exists (WSL 2, user `shreeya`); commands ran on it |
-| "10/10 passed" tests | **SUPERSEDED** — the suite is now 25 tests and genuinely passes |
-| "0 High/Critical CVEs" | **UNVERIFIED** — no Trivy run has executed; the gate is configured but has not fired |
-| AWS VPC + EKS deployed | **UNVERIFIED** — no Terraform apply has run; no credentials exist |
-| Kubernetes v1.30/v1.31 cluster | **SUPERSEDED** — a real minikube v1.34.0 cluster exists and CampusFix runs on it |
-| Grafana dashboard with live panels | **VERIFIED NOW** — 7 populated panels, 58 435 real samples |
-| Screenshots of the above | **VERIFIED NOW** for Docker, Kubernetes, Prometheus, Grafana |
+| Environment `Ubuntu 22.04` on a hosted devbox | **SUPERSEDED** — current environment is Ubuntu 24.04.5 under WSL 2 |
+| `10/10 passed` tests | **SUPERSEDED** — current suite has 25 passing tests |
+| Zero HIGH/CRITICAL CVEs | **NOW VERIFIED LOCALLY** for both current images; GitHub Actions scan output is still pending |
+| AWS VPC + EKS deployed | **NOT TRUE / NOT DONE** — no AWS account credentials or Terraform apply exist |
+| Kubernetes v1.30/v1.31 cluster | **SUPERSEDED** — local Minikube v1.34.0 was used |
+| Six CampusFix scrape targets and seven dashboard panels | **HISTORICAL** — current run scrapes 2 backend targets and displays five current panels |
+| Local terminal screenshots | **CAPTURED** — screenshots 19–25 in §8 |
+| Actions and GHCR screenshots | **MISSING** — require a push and real workflow run |
+| AWS screenshots | **MISSING** — no AWS account or resources are configured |
+
+---
+
+## 12. Presentation and recording
+
+The editable nine-slide deck is saved in `submission/CampusFix-Capstone-Deck.pptx`.
+Its speaker notes include a short talk track and a suggested order for recording
+the working application, Compose stack, tests, Minikube Ingress, Prometheus,
+and Grafana. It states that the GitHub Actions run and AWS deployment are still
+pending; the slide deck is a guide, not a substitute for the instructor's M10
+live or recorded demo of a pushed change, pipeline run, and deployment update.

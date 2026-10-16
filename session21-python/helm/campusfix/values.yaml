@@ -72,6 +72,6 @@ hpa:
 
 monitoring:
   # Must match the release name of the kube-prometheus-stack installation.
-  release: kube-prometheus-stack
+  release: monitoring
   serviceMonitor:
     enabled: true

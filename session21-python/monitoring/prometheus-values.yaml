@@ -1,4 +1,4 @@
-# Values used when installing the kube-prometheus-stack for CampusFix observability.
+# Values used when installing kube-prometheus-stack for CampusFix observability.
 #
 #   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 #   helm repo update
@@ -6,15 +6,21 @@
 #     --namespace monitoring --create-namespace \
 #     --values session21-python/monitoring/prometheus-values.yaml
 #
-# The CampusFix ServiceMonitor carries `release: kube-prometheus-stack`, so the
-# release name must stay in sync with monitoring.release in the chart values.
+# The CampusFix ServiceMonitor carries `release: monitoring`, matching this
+# Helm release name and `monitoring.release` in helm/campusfix/values.yaml.
 
 grafana:
   enabled: true
   # Use a NodePort-free access path; port-forward for local use:
-  #   kubectl port-forward -n monitoring svc/monitoring-grafana 8080:80
+  #   kubectl port-forward -n monitoring svc/monitoring-grafana 3001:80
   service:
     type: ClusterIP
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
 
 prometheus:
   prometheusSpec:
@@ -33,14 +39,6 @@ prometheus:
 # Alertmanager is not required for this project and costs memory.
 alertmanager:
   enabled: false
-
-# The built-in Grafana dashboards are optional; the CampusFix dashboard is
-# provisioned separately.
-grafanaDashboard:
-  enabled: true
-  sidecar:
-    label: grafana_dashboard
-  labelValue: "1"
 
 kubeStateMetrics:
   enabled: true
