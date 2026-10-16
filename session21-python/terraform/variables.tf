@@ -39,9 +39,19 @@ variable "availability_zones" {
 }
 
 variable "node_instance_types" {
-  description = "EC2 instance types for the EKS managed node group."
+  description = <<-EOT
+    EC2 instance types for the EKS managed node group. The new AWS Free Tier
+    plan hard-blocks instance types that are not free-tier-eligible
+    (AsgInstanceLaunchFailures: Invalid Parameter Combination). List the
+    allowed types with:
+      aws ec2 describe-instance-types \
+        --filters Name=free-tier-eligible,Values=true \
+        --query "InstanceTypes[].InstanceType" --output text
+    Use x86_64 types (t3.small, c7i-flex.large) unless images are built
+    multi-arch; t4g.* are ARM64 and cannot run the current amd64 images.
+  EOT
   type        = list(string)
-  default     = ["t3.medium"]
+  default     = ["t3.small"]
 }
 
 variable "node_min_size" {
