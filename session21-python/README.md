@@ -1,5 +1,7 @@
 # Session 21 — DevOps Final Capstone: CampusFix
 
+VIDEO AND PPT LINK - https://drive.google.com/drive/folders/19_GeDklmf_gbDyHO9d-9UoADQdQ1uc0t?usp=sharing
+
 > [!NOTE]
 > **Capstone submission report, validation evidence and screenshots:**
 > [Readme-homework.md](Readme-homework.md).
